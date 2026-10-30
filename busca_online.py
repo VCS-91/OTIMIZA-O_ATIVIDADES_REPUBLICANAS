@@ -63,7 +63,8 @@ class AgenteOnline:
         self.tarefas = list(tarefas)
         self.estado = list(estado)
         self.dia_atual = dia_atual
-        self.alteradas: set[int] = set()       # ocorrências mexidas nesta semana
+        # ocorrências mexidas nesta semana
+        self.alteradas: set[int] = set()
         self.nao_realizadas: set[int] = set()
         self.historico: list[tuple[Imprevisto, list[Mudanca]]] = []
         self._pendentes: list[tuple[int, int]] = []
@@ -72,7 +73,8 @@ class AgenteOnline:
         rng = rng or random.Random()
         if imp.tipo == "indisponivel":
             turnos = range(len(TURNOS)) if imp.turno is None else [imp.turno]
-            self.integrantes[imp.integrante].ocupados.update((imp.dia, s) for s in turnos)
+            self.integrantes[imp.integrante].ocupados.update(
+                (imp.dia, s) for s in turnos)
         elif imp.tipo == "extra":
             self._nova_ocorrencia(imp.nova_tarefa)
         elif imp.tipo == "nao_realizada":
@@ -80,7 +82,8 @@ class AgenteOnline:
             base = self.tarefas[self.estado[imp.ocorrencia][0]]
             dias = tuple(d for d in base.dias_permitidos if d >= self.dia_atual) \
                 or tuple(range(self.dia_atual, 7))
-            self._nova_ocorrencia(replace(base, vezes_por_semana=1, dias_permitidos=dias, extra=True))
+            self._nova_ocorrencia(
+                replace(base, vezes_por_semana=1, dias_permitidos=dias, extra=True))
         mudancas = self.replanejar(rng)
         self.historico.append((imp, mudancas))
         return mudancas
@@ -92,8 +95,10 @@ class AgenteOnline:
 
     def replanejar(self, rng: random.Random) -> list[Mudanca]:
         anterior = list(self.estado)
-        fixos = {k for k, a in enumerate(self.estado) if a is not None and a[2] < self.dia_atual}
-        problema = ProblemaEscala(self.integrantes, self.tarefas, fixos, self.dia_atual, anterior)
+        fixos = {k for k, a in enumerate(
+            self.estado) if a is not None and a[2] < self.dia_atual}
+        problema = ProblemaEscala(
+            self.integrantes, self.tarefas, fixos, self.dia_atual, anterior)
 
         # 1) reparo: ocorrências futuras que ficaram inviáveis voltam a ser pendentes
         pendentes, self._pendentes = self._pendentes, []
@@ -104,10 +109,12 @@ class AgenteOnline:
         estado = solucao_gulosa(problema, self.estado, pendentes, rng)
 
         # 2) ajuste fino com poucas iterações e temperatura baixa
-        estado, _ = simulated_annealing(problema, estado, rng, iteracoes=3000, temperatura=5.0)
+        estado, _ = simulated_annealing(
+            problema, estado, rng, iteracoes=3000, temperatura=5.0)
         self.estado = estado
 
-        mudancas = [Mudanca(k, anterior[k], estado[k]) for k in range(len(estado)) if anterior[k] != estado[k]]
+        mudancas = [Mudanca(k, anterior[k], estado[k])
+                    for k in range(len(estado)) if anterior[k] != estado[k]]
         self.alteradas.update(m.ocorrencia for m in mudancas)
         return mudancas
 
@@ -125,7 +132,8 @@ class AgenteOnline:
             base = rng.choice(EXTRAS_POSSIVEIS)
             return Imprevisto(tipo, hoje, nova_tarefa=replace(base, dias_permitidos=(hoje,), extra=True))
         # indisponível justamente quando tinha tarefa, para forçar o replanejamento
-        proximas = [a for a in self.estado if a is not None and hoje <= a[2] <= hoje + 1]
+        proximas = [
+            a for a in self.estado if a is not None and hoje <= a[2] <= hoje + 1]
         if proximas:
             _, i, d, s = rng.choice(proximas)
             return Imprevisto(tipo, d, rng.choice([s, None]), integrante=i)

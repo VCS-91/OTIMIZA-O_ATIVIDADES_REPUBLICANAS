@@ -24,7 +24,8 @@ from dataclasses import dataclass, field
 
 DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
 TURNOS = ["Manhã", "Tarde", "Noite"]
-HIERARQUIAS = {5: "Decano", 4: "Vice-Decano", 3: "Morador", 2: "Semi-Bixo", 1: "Calouro"}
+HIERARQUIAS = {5: "Decano", 4: "Vice-Decano",
+               3: "Morador", 2: "Semi-Bixo", 1: "Calouro"}
 # Quantos dias livres (sem tarefa, mesmo estando disponível) cada nível pode escolher.
 MAX_DIAS_LIVRES = {5: 2, 4: 1, 3: 1, 2: 0, 1: 0}
 
@@ -33,7 +34,8 @@ MAX_DIAS_LIVRES = {5: 2, 4: 1, 3: 1, 2: 0, 1: 0}
 class Integrante:
     nome: str
     hierarquia: int
-    ocupados: set[tuple[int, int]] = field(default_factory=set)  # (dia, turno) com aula/trabalho
+    ocupados: set[tuple[int, int]] = field(
+        default_factory=set)  # (dia, turno) com aula/trabalho
     dias_livres: set[int] = field(default_factory=set)
     dias_preferidos: set[int] = field(default_factory=set)
 
@@ -52,7 +54,8 @@ class Tarefa:
     esforco: int
     turnos_permitidos: tuple[int, ...] = (0, 1, 2)
     dias_permitidos: tuple[int, ...] = tuple(range(7))
-    depende_de: tuple[str, ...] = ()  # tarefas que, no mesmo dia, devem vir antes
+    # tarefas que, no mesmo dia, devem vir antes
+    depende_de: tuple[str, ...] = ()
     extra: bool = False  # criada pela busca online (imprevisto ou repetição)
 
 
@@ -67,13 +70,19 @@ def _agenda(**dias: str) -> set[tuple[int, int]]:
 
 def integrantes_simulados() -> list[Integrante]:
     return [
-        Integrante("Carlos", 5, _agenda(seg="M", ter="MT", qua="M", qui="MT"), {5, 6}, {0, 2}),
-        Integrante("Bruno", 4, _agenda(seg="MT", ter="MT", qua="M", qui="MT", sex="MT"), {4}, {2}),
-        Integrante("Diego", 3, _agenda(seg="MT", ter="N", qua="MT", qui="N", sex="MT"), {6}, {1, 3}),
-        Integrante("Felipe", 3, _agenda(seg="T", ter="T", qua="T", qui="T", sex="T", sab="M"), set(), {4}),
+        Integrante("Carlos", 5, _agenda(seg="M", ter="MT",
+                   qua="M", qui="MT"), {5, 6}, {0, 2}),
+        Integrante("Bruno", 4, _agenda(seg="MT", ter="MT",
+                   qua="M", qui="MT", sex="MT"), {4}, {2}),
+        Integrante("Diego", 3, _agenda(seg="MT", ter="N",
+                   qua="MT", qui="N", sex="MT"), {6}, {1, 3}),
+        Integrante("Felipe", 3, _agenda(seg="T", ter="T", qua="T",
+                   qui="T", sex="T", sab="M"), set(), {4}),
         Integrante("Lucas", 2, _agenda(seg="MN", qua="MN", sex="M")),
-        Integrante("Gabriel", 1, _agenda(seg="MT", ter="M", qua="MT", qui="M", sex="M")),
-        Integrante("Henrique", 1, _agenda(ter="MT", qua="MT", qui="MT", sex="MT", sab="M")),
+        Integrante("Gabriel", 1, _agenda(
+            seg="MT", ter="M", qua="MT", qui="M", sex="M")),
+        Integrante("Henrique", 1, _agenda(
+            ter="MT", qua="MT", qui="MT", sex="MT", sab="M")),
     ]
 
 
@@ -84,7 +93,8 @@ def tarefas_padrao() -> list[Tarefa]:
         Tarefa("Varrer a casa", 3, 2),
         Tarefa("Passar pano", 2, 3, depende_de=("Varrer a casa",)),
         Tarefa("Limpar banheiro", 2, 3),
-        Tarefa("Levar o lixo", 3, 1, turnos_permitidos=(2,), dias_permitidos=(0, 2, 4)),
+        Tarefa("Levar o lixo", 3, 1, turnos_permitidos=(
+            2,), dias_permitidos=(0, 2, 4)),
         Tarefa("Lavar panos e toalhas", 1, 2),
         Tarefa("Compras do mercado", 1, 3, turnos_permitidos=(0, 1)),
         Tarefa("Limpar o quintal", 1, 2, turnos_permitidos=(0, 1)),
@@ -159,18 +169,22 @@ def ler_respostas_forms(texto_csv: str) -> tuple[list[Integrante], list[str]]:
         nome = (linha.get(col_nome) or "").strip()
         if not nome:
             continue
-        nivel = _hierarquia(linha.get(col_hierarquia, "")) if col_hierarquia else 1
+        nivel = _hierarquia(linha.get(col_hierarquia, "")
+                            ) if col_hierarquia else 1
         ocupados = {(d, t) for c, d in col_grade.items()
                     for item in _itens(linha.get(c)) if (t := _turno(item)) is not None}
-        livres = [d for item in _itens(linha.get(col_livres)) if (d := _dia(item)) is not None]
+        livres = [d for item in _itens(linha.get(col_livres)) if (
+            d := _dia(item)) is not None]
         maximo = MAX_DIAS_LIVRES.get(nivel, 0)
         if len(livres) > maximo:
             avisos.append(f"{nome} ({HIERARQUIAS[nivel]}) pediu {len(livres)} dia(s) livre(s), "
                           f"mas só pode ter {maximo}; mantidos os primeiros.")
             livres = livres[:maximo]
-        preferidos = {d for item in _itens(linha.get(col_preferidos)) if (d := _dia(item)) is not None}
+        preferidos = {d for item in _itens(
+            linha.get(col_preferidos)) if (d := _dia(item)) is not None}
         # Se a mesma pessoa respondeu mais de uma vez, vale a resposta mais recente.
-        por_nome[_normalizar(nome)] = Integrante(nome, nivel, ocupados, set(livres), preferidos)
+        por_nome[_normalizar(nome)] = Integrante(
+            nome, nivel, ocupados, set(livres), preferidos)
 
     if not por_nome:
         raise ValueError("Nenhuma resposta válida encontrada no CSV.")
@@ -213,7 +227,9 @@ def gerar_csv_exemplo(integrantes: list[Integrante], caminho: str) -> None:
         escritor = csv.writer(f)
         escritor.writerow(cabecalho)
         for p in integrantes:
-            grade = [", ".join(TURNOS[s] for s in range(3) if (d, s) in p.ocupados) for d in range(7)]
+            grade = [", ".join(TURNOS[s] for s in range(
+                3) if (d, s) in p.ocupados) for d in range(7)]
             escritor.writerow([agora, p.nome, p.cargo, *grade,
-                               ", ".join(DIAS[d] for d in sorted(p.dias_livres)),
+                               ", ".join(DIAS[d]
+                                         for d in sorted(p.dias_livres)),
                                ", ".join(DIAS[d] for d in sorted(p.dias_preferidos))])

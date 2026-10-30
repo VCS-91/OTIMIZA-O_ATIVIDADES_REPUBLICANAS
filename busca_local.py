@@ -30,9 +30,12 @@ PESOS = {
     "choque": 60,          # integrante com duas tarefas no mesmo turno
     "dependencia": 40,     # ex.: passar pano num dia sem varrer, ou num turno anterior
     "dias_seguidos": 10,   # tarefa de poucas vezes por semana em dias consecutivos
-    "carga": 4,            # desequilíbrio de esforço entre integrantes (soma dos desvios²)
-    "preferencia": 3,      # fora dos dias preferidos (multiplicado pelo nível hierárquico)
-    "mudanca": 15,         # alteração em relação à escala anterior (usado pela busca online)
+    # desequilíbrio de esforço entre integrantes (soma dos desvios²)
+    "carga": 4,
+    # fora dos dias preferidos (multiplicado pelo nível hierárquico)
+    "preferencia": 3,
+    # alteração em relação à escala anterior (usado pela busca online)
+    "mudanca": 15,
 }
 
 Alocacao = tuple[int, int, int, int]  # (tarefa, integrante, dia, turno)
@@ -45,10 +48,12 @@ class ProblemaEscala:
                  horarios: list[tuple[int, int]] | None = None):
         self.integrantes = integrantes
         self.tarefas = tarefas
-        self.fixos = set(fixos)          # ocorrências que não podem ser mexidas
+        # ocorrências que não podem ser mexidas
+        self.fixos = set(fixos)
         self.dia_minimo = dia_minimo     # não aloca nada antes deste dia
         self.referencia = referencia     # escala anterior, para medir mudanças
-        self.horarios = horarios         # (dia, turno) de cada ocorrência, vindos da busca clássica
+        # (dia, turno) de cada ocorrência, vindos da busca clássica
+        self.horarios = horarios
         self._dependencias = {t.nome: t.depende_de for t in tarefas}
         self._dominios: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
 
@@ -65,7 +70,8 @@ class ProblemaEscala:
             horarios = [(d, s) for d in tarefa.dias_permitidos if d >= self.dia_minimo
                         for s in tarefa.turnos_permitidos]
         if chave not in self._dominios:
-            self._dominios[chave] = [(i, d, s) for i in range(len(self.integrantes)) for d, s in horarios]
+            self._dominios[chave] = [(i, d, s) for i in range(
+                len(self.integrantes)) for d, s in horarios]
         return self._dominios[chave]
 
     def componentes(self, estado: list[Alocacao | None]) -> dict[str, float]:
@@ -120,7 +126,8 @@ class ProblemaEscala:
             novo[k] = (t, *rng.choice(self.dominio(k, t)))
         elif r < 0.75:  # troca só o responsável
             novo[k] = (t, rng.randrange(len(self.integrantes)), d, s)
-        else:           # troca os responsáveis de duas ocorrências (os horários ficam)
+        # troca os responsáveis de duas ocorrências (os horários ficam)
+        else:
             k2 = rng.choice(moveis)
             t2, i2, d2, s2 = novo[k2]
             novo[k], novo[k2] = (t, i2, d, s), (t2, i, d2, s2)
@@ -137,7 +144,8 @@ def solucao_gulosa(problema: ProblemaEscala, estado: list[Alocacao | None],
     estado = list(estado)
     pendentes = list(pendentes)
     rng.shuffle(pendentes)
-    pendentes.sort(key=lambda p: (len(problema.dominio(*p)), -problema.tarefas[p[1]].esforco))
+    pendentes.sort(key=lambda p: (
+        len(problema.dominio(*p)), -problema.tarefas[p[1]].esforco))
     for k, t in pendentes:
         opcoes = list(problema.dominio(k, t))
         rng.shuffle(opcoes)
@@ -190,7 +198,8 @@ def gerar_escala(integrantes: list[Integrante], tarefas: list[Tarefa], horarios:
     inicio = time.perf_counter()
     problema = ProblemaEscala(integrantes, tarefas, horarios=horarios)
     ocorrencias = problema.ocorrencias()
-    estado = solucao_gulosa(problema, [None] * len(ocorrencias), list(enumerate(ocorrencias)), rng)
+    estado = solucao_gulosa(
+        problema, [None] * len(ocorrencias), list(enumerate(ocorrencias)), rng)
     custo_inicial = problema.custo(estado)
     estado, custo = simulated_annealing(problema, estado, rng, iteracoes)
     return ResultadoLocal(estado, custo, custo_inicial, problema.componentes(estado),

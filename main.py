@@ -51,7 +51,8 @@ NOMES_COMPONENTES = {
 class App(tk.Tk):
     def __init__(self, integrantes: list[Integrante], tarefas: list[Tarefa], fonte: str):
         super().__init__()
-        self.title("Sistema Inteligente de Gestão e Logística Doméstica — República")
+        self.title(
+            "Sistema Inteligente de Gestão e Logística Doméstica — República")
         self.geometry("1400x800")
         self.minsize(1100, 600)
         self.integrantes = integrantes
@@ -72,15 +73,22 @@ class App(tk.Tk):
     def _montar(self) -> None:
         barra = ttk.Frame(self, padding=(8, 6))
         barra.pack(fill="x")
-        ttk.Button(barra, text="Dados simulados", command=self.usar_simulados).pack(side="left")
-        ttk.Button(barra, text="Importar CSV do Forms...", command=self.importar_csv).pack(side="left", padx=4)
-        ttk.Button(barra, text="Importar do Google Planilhas...", command=self.importar_sheets).pack(side="left")
-        ttk.Separator(barra, orient="vertical").pack(side="left", fill="y", padx=10)
-        ttk.Button(barra, text="Gerar nova escala", command=self.regerar).pack(side="left")
+        ttk.Button(barra, text="Dados simulados",
+                   command=self.usar_simulados).pack(side="left")
+        ttk.Button(barra, text="Importar CSV do Forms...",
+                   command=self.importar_csv).pack(side="left", padx=4)
+        ttk.Button(barra, text="Importar do Google Planilhas...",
+                   command=self.importar_sheets).pack(side="left")
+        ttk.Separator(barra, orient="vertical").pack(
+            side="left", fill="y", padx=10)
+        ttk.Button(barra, text="Gerar nova escala",
+                   command=self.regerar).pack(side="left")
         ttk.Button(barra, text="Registrar imprevisto...", command=lambda: DialogoImprevisto(self)).pack(
             side="left", padx=4)
-        ttk.Button(barra, text="Imprevisto aleatório", command=self.imprevisto_aleatorio).pack(side="left")
-        ttk.Button(barra, text="Avançar dia ▶", command=self.avancar_dia).pack(side="left", padx=4)
+        ttk.Button(barra, text="Imprevisto aleatório",
+                   command=self.imprevisto_aleatorio).pack(side="left")
+        ttk.Button(barra, text="Avançar dia ▶",
+                   command=self.avancar_dia).pack(side="left", padx=4)
 
         self.abas = ttk.Notebook(self)
         self.abas.pack(fill="both", expand=True, padx=8)
@@ -90,7 +98,8 @@ class App(tk.Tk):
         self._montar_aba_log()
 
         self.status = tk.StringVar()
-        ttk.Label(self, textvariable=self.status, anchor="w", padding=(8, 4), relief="sunken").pack(fill="x")
+        ttk.Label(self, textvariable=self.status, anchor="w",
+                  padding=(8, 4), relief="sunken").pack(fill="x")
 
     def _montar_aba_escala(self) -> None:
         aba = ttk.Frame(self.abas, padding=6)
@@ -98,11 +107,14 @@ class App(tk.Tk):
         quadro = ttk.Frame(aba)
         quadro.pack(fill="both", expand=True)
         canvas = tk.Canvas(quadro, highlightthickness=0, bg="white")
-        rolagem = ttk.Scrollbar(quadro, orient="vertical", command=canvas.yview)
+        rolagem = ttk.Scrollbar(
+            quadro, orient="vertical", command=canvas.yview)
         self.grade = tk.Frame(canvas, bg="white")
         janela = canvas.create_window((0, 0), window=self.grade, anchor="nw")
-        self.grade.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(janela, width=e.width))
+        self.grade.bind("<Configure>", lambda e: canvas.configure(
+            scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(
+            janela, width=e.width))
         canvas.configure(yscrollcommand=rolagem.set)
         canvas.pack(side="left", fill="both", expand=True)
         rolagem.pack(side="right", fill="y")
@@ -111,7 +123,8 @@ class App(tk.Tk):
         legenda.pack(fill="x")
         for cor, texto in [(COR["livre"], "dia livre"), (COR["conflito"], "conflito com horário"),
                            (COR["alterada"], "alterada pela busca online"), (COR["coluna_hoje"], "hoje")]:
-            tk.Label(legenda, bg=cor, width=2, relief="solid", bd=1).pack(side="left", padx=(8, 3))
+            tk.Label(legenda, bg=cor, width=2, relief="solid",
+                     bd=1).pack(side="left", padx=(8, 3))
             ttk.Label(legenda, text=texto).pack(side="left")
         ttk.Label(legenda, text="   M/T/N = manhã/tarde/noite   ★ = tarefa extra   ✗ = não realizada   "
                                 "dias anteriores a hoje em cinza").pack(side="left")
@@ -124,42 +137,50 @@ class App(tk.Tk):
         self.grade_plano = tk.Frame(aba, bg="white")
         self.grade_plano.pack(fill="x", pady=6)
 
-        colunas = {"tarefa": 220, "vezes": 60, "horarios": 380, "custo": 80, "astar": 110, "ucs": 150}
+        colunas = {"tarefa": 220, "vezes": 60, "horarios": 380,
+                   "custo": 80, "astar": 110, "ucs": 150}
         titulos = ["Tarefa (ordem de planejamento)", "Vezes", "Horários escolhidos", "Custo",
                    "Nós expandidos A*", "Nós sem heurística (UCS)"]
-        self.tabela_plano = ttk.Treeview(aba, columns=list(colunas), show="headings", height=10)
+        self.tabela_plano = ttk.Treeview(
+            aba, columns=list(colunas), show="headings", height=10)
         for (coluna, largura), titulo in zip(colunas.items(), titulos):
             self.tabela_plano.heading(coluna, text=titulo)
             self.tabela_plano.column(coluna, width=largura, anchor="w")
         self.tabela_plano.pack(fill="both", expand=True, pady=6)
         self.info_plano = tk.StringVar()
-        ttk.Label(aba, textvariable=self.info_plano, justify="left").pack(fill="x")
+        ttk.Label(aba, textvariable=self.info_plano,
+                  justify="left").pack(fill="x")
 
     def _montar_aba_integrantes(self) -> None:
         aba = ttk.Frame(self.abas, padding=8)
         self.abas.add(aba, text="Integrantes e Busca Local")
         self.info_fonte = tk.StringVar()
-        ttk.Label(aba, textvariable=self.info_fonte, font=FONTE_NEGRITO).pack(anchor="w")
+        ttk.Label(aba, textvariable=self.info_fonte,
+                  font=FONTE_NEGRITO).pack(anchor="w")
 
         colunas = {"nome": 140, "cargo": 90, "livres": 150, "preferidos": 150, "ocupados": 120,
                    "tarefas": 80, "carga": 80}
         titulos = ["Nome", "Hierarquia", "Dias livres", "Dias preferidos", "Turnos ocupados",
                    "Tarefas", "Esforço"]
-        self.tabela_integrantes = ttk.Treeview(aba, columns=list(colunas), show="headings", height=10)
+        self.tabela_integrantes = ttk.Treeview(
+            aba, columns=list(colunas), show="headings", height=10)
         for (coluna, largura), titulo in zip(colunas.items(), titulos):
             self.tabela_integrantes.heading(coluna, text=titulo)
             self.tabela_integrantes.column(coluna, width=largura, anchor="w")
         self.tabela_integrantes.pack(fill="x", pady=8)
 
-        quadro = ttk.LabelFrame(aba, text="Busca Local (guloso + Simulated Annealing)", padding=8)
+        quadro = ttk.LabelFrame(
+            aba, text="Busca Local (guloso + Simulated Annealing)", padding=8)
         quadro.pack(fill="both", expand=True)
         self.info_local = tk.StringVar()
-        ttk.Label(quadro, textvariable=self.info_local, justify="left", font=("Consolas", 10)).pack(anchor="w")
+        ttk.Label(quadro, textvariable=self.info_local,
+                  justify="left", font=("Consolas", 10)).pack(anchor="w")
 
     def _montar_aba_log(self) -> None:
         aba = ttk.Frame(self.abas, padding=8)
         self.abas.add(aba, text="Imprevistos (Busca Online)")
-        self.log = tk.Text(aba, wrap="word", font=("Consolas", 10), state="disabled")
+        self.log = tk.Text(aba, wrap="word", font=(
+            "Consolas", 10), state="disabled")
         rolagem = ttk.Scrollbar(aba, orient="vertical", command=self.log.yview)
         self.log.configure(yscrollcommand=rolagem.set)
         self.log.pack(side="left", fill="both", expand=True)
@@ -172,10 +193,12 @@ class App(tk.Tk):
         self.update_idletasks()
         try:
             self.plano = planejar_semana(self.integrantes, self.tarefas)
-            self.resultado = gerar_escala(self.integrantes, self.tarefas, self.plano.horarios)
+            self.resultado = gerar_escala(
+                self.integrantes, self.tarefas, self.plano.horarios)
         finally:
             self.configure(cursor="")
-        self.agente = AgenteOnline(self.integrantes, self.tarefas, self.resultado.estado, dia)
+        self.agente = AgenteOnline(
+            self.integrantes, self.tarefas, self.resultado.estado, dia)
         r = self.resultado
         self._log(f"[{DIAS[dia]}] Busca clássica: plano da semana com custo {self.plano.custo:.1f} "
                   f"({self.plano.nos_expandidos} nós expandidos pelo A*)")
@@ -207,7 +230,8 @@ class App(tk.Tk):
         self.after(60_000, self._verificar_data)
 
     def usar_simulados(self) -> None:
-        self._usar_integrantes(dados.integrantes_simulados(), [], "Dados simulados")
+        self._usar_integrantes(
+            dados.integrantes_simulados(), [], "Dados simulados")
 
     def importar_csv(self) -> None:
         caminho = filedialog.askopenfilename(title="Respostas do Google Forms (CSV)",
@@ -219,7 +243,8 @@ class App(tk.Tk):
         except Exception as erro:
             messagebox.showerror("Erro ao ler o CSV", str(erro))
             return
-        self._usar_integrantes(integrantes, avisos, f"Google Forms ({caminho.split('/')[-1]})")
+        self._usar_integrantes(integrantes, avisos,
+                               f"Google Forms ({caminho.split('/')[-1]})")
 
     def importar_sheets(self) -> None:
         url = simpledialog.askstring(
@@ -229,15 +254,18 @@ class App(tk.Tk):
         if not url:
             return
         try:
-            integrantes, avisos = dados.carregar_forms_google_sheets(url.strip())
+            integrantes, avisos = dados.carregar_forms_google_sheets(
+                url.strip())
         except Exception as erro:
             messagebox.showerror("Erro ao ler a planilha", str(erro))
             return
-        self._usar_integrantes(integrantes, avisos, "Google Forms (planilha online)")
+        self._usar_integrantes(integrantes, avisos,
+                               "Google Forms (planilha online)")
 
     def _usar_integrantes(self, integrantes: list[Integrante], avisos: list[str], fonte: str) -> None:
         self.integrantes, self.fonte = integrantes, fonte
-        self._log(f"Dados carregados: {fonte}, {len(integrantes)} integrantes.")
+        self._log(
+            f"Dados carregados: {fonte}, {len(integrantes)} integrantes.")
         for aviso in avisos:
             self._log(f"   aviso: {aviso}")
         if avisos:
@@ -246,7 +274,8 @@ class App(tk.Tk):
 
     def registrar_imprevisto(self, imp: Imprevisto) -> None:
         ag = self.agente
-        descricao = imp.descricao(ag)  # antes de registrar: a ocorrência ainda tem o responsável original
+        # antes de registrar: a ocorrência ainda tem o responsável original
+        descricao = imp.descricao(ag)
         mudancas = ag.registrar(imp, self.rng)
         self._log(f"[{DIAS[ag.dia_atual]}] Imprevisto: {descricao}")
         if not mudancas:
@@ -255,7 +284,8 @@ class App(tk.Tk):
             self._log("   " + self._descrever_mudanca(m))
         sem_responsavel = sum(1 for a in ag.estado if a is None)
         if sem_responsavel:
-            self._log(f"   atenção: {sem_responsavel} tarefa(s) sem nenhuma opção válida de responsável")
+            self._log(
+                f"   atenção: {sem_responsavel} tarefa(s) sem nenhuma opção válida de responsável")
         self.atualizar()
 
     def imprevisto_aleatorio(self) -> None:
@@ -268,7 +298,8 @@ class App(tk.Tk):
         self._atualizar_plano()
         self._atualizar_integrantes()
         ag = self.agente
-        comp = ProblemaEscala(ag.integrantes, ag.tarefas).componentes(ag.estado)
+        comp = ProblemaEscala(
+            ag.integrantes, ag.tarefas).componentes(ag.estado)
         custo = sum(PESOS[k] * v for k, v in comp.items())
         rigidas = int(comp["indisponivel"] + comp["dia_repetido"])
         self.status.set(f"Hoje: {DIAS[ag.dia_atual]}   |   Fonte: {self.fonte}   |   "
@@ -300,7 +331,8 @@ class App(tk.Tk):
                 por_celula.setdefault((i, d), []).append((s, k, t))
 
         for i, pessoa in enumerate(ag.integrantes):
-            celula(i + 1, 0, f"{pessoa.nome}\n{pessoa.cargo}", COR["celula"], COR["texto"])
+            celula(i + 1, 0, f"{pessoa.nome}\n{pessoa.cargo}",
+                   COR["celula"], COR["texto"])
             for d in range(7):
                 linhas, conflito, alterada = [], False, False
                 if d in pessoa.dias_livres:
@@ -311,7 +343,8 @@ class App(tk.Tk):
                     linhas.append(f"{TURNOS[s][0]} · {marca}{tarefa.nome}")
                     conflito |= not pessoa.disponivel(d, s)
                     alterada |= k in ag.alteradas
-                ocupados = [TURNOS[s][0] for s in range(3) if (d, s) in pessoa.ocupados]
+                ocupados = [TURNOS[s][0]
+                            for s in range(3) if (d, s) in pessoa.ocupados]
                 if ocupados and d not in pessoa.dias_livres:
                     linhas.append(f"(ocupado: {' '.join(ocupados)})")
                 bg = (COR["conflito"] if conflito else COR["alterada"] if alterada
@@ -340,19 +373,23 @@ class App(tk.Tk):
             if a is not None:
                 tarefa = ag.tarefas[a[0]]
                 marca = "✗ " if k in ag.nao_realizadas else "★ " if tarefa.extra else ""
-                por_horario.setdefault((a[2], a[3]), []).append(marca + tarefa.nome)
+                por_horario.setdefault((a[2], a[3]), []).append(
+                    marca + tarefa.nome)
         for s in range(3):
             celula(s + 1, 0, TURNOS[s], COR["celula"], COR["texto"])
             for d in range(7):
                 livres = sum(p.disponivel(d, s) for p in ag.integrantes)
-                texto = "\n".join(sorted(por_horario.get((d, s), []))) + f"\n({livres} disponíveis)"
+                texto = "\n".join(sorted(por_horario.get(
+                    (d, s), []))) + f"\n({livres} disponíveis)"
                 bg = COR["coluna_hoje"] if d == ag.dia_atual else COR["celula"]
-                celula(s + 1, d + 1, texto.strip(), bg, COR["passado"] if d < ag.dia_atual else COR["texto"], FONTE)
+                celula(s + 1, d + 1, texto.strip(), bg,
+                       COR["passado"] if d < ag.dia_atual else COR["texto"], FONTE)
 
         self.tabela_plano.delete(*self.tabela_plano.get_children())
         for p in self.plano.por_tarefa:
             tarefa = self.tarefas[p.tarefa]
-            horarios = ", ".join(f"{DIAS[d][:3]}-{TURNOS[s][0]}" for d, s in p.horarios)
+            horarios = ", ".join(
+                f"{DIAS[d][:3]}-{TURNOS[s][0]}" for d, s in p.horarios)
             self.tabela_plano.insert("", "end", values=(tarefa.nome, tarefa.vezes_por_semana, horarios,
                                                         f"{p.custo:.1f}", p.nos_expandidos, p.nos_sem_heuristica))
         self.info_plano.set(
@@ -365,7 +402,8 @@ class App(tk.Tk):
         self.info_fonte.set(f"Fonte dos dados: {self.fonte}")
         self.tabela_integrantes.delete(*self.tabela_integrantes.get_children())
         for i, p in enumerate(sorted(ag.integrantes, key=lambda p: -p.hierarquia)):
-            minhas = [a for a in ag.estado if a is not None and ag.integrantes[a[1]] is p]
+            minhas = [
+                a for a in ag.estado if a is not None and ag.integrantes[a[1]] is p]
             self.tabela_integrantes.insert("", "end", values=(
                 p.nome, p.cargo,
                 ", ".join(DIAS[d] for d in sorted(p.dias_livres)) or "—",
@@ -380,7 +418,8 @@ class App(tk.Tk):
                   "",
                   f"{'Componente':<45}{'qtd':>8}{'peso':>8}"]
         for chave, nome in NOMES_COMPONENTES.items():
-            linhas.append(f"{nome:<45}{r.componentes[chave]:>8.0f}{PESOS[chave]:>8}")
+            linhas.append(
+                f"{nome:<45}{r.componentes[chave]:>8.0f}{PESOS[chave]:>8}")
         self.info_local.set("\n".join(linhas))
 
     def _descrever_mudanca(self, m: Mudanca) -> str:
@@ -436,17 +475,22 @@ class DialogoImprevisto(tk.Toplevel):
 
         linha("tipo", "Tipo:", combo("tipo", TIPOS.values()))
         self.cb_dia = linha("dia", "Dia:", combo("dia"))
-        linha("integrante", "Integrante:", combo("integrante", [p.nome for p in app.agente.integrantes]))
+        linha("integrante", "Integrante:", combo(
+            "integrante", [p.nome for p in app.agente.integrantes]))
         self.cb_turno = linha("turno", "Turno:", combo("turno"))
-        self.cb_ocorrencia = linha("ocorrencia", "Tarefa:", combo("ocorrencia"))
-        linha("nome", "Nova tarefa:", ttk.Entry(corpo, textvariable=self.var["nome"], width=45))
+        self.cb_ocorrencia = linha(
+            "ocorrencia", "Tarefa:", combo("ocorrencia"))
+        linha("nome", "Nova tarefa:", ttk.Entry(
+            corpo, textvariable=self.var["nome"], width=45))
         linha("esforco", "Esforço (1-5):", ttk.Spinbox(corpo, from_=1, to=5, textvariable=self.var["esforco"],
                                                        width=5))
 
         botoes = ttk.Frame(corpo)
         botoes.grid(row=99, column=0, columnspan=2, sticky="e", pady=(10, 0))
-        ttk.Button(botoes, text="Cancelar", command=self.destroy).pack(side="right")
-        ttk.Button(botoes, text="Registrar", command=self._confirmar).pack(side="right", padx=6)
+        ttk.Button(botoes, text="Cancelar",
+                   command=self.destroy).pack(side="right")
+        ttk.Button(botoes, text="Registrar", command=self._confirmar).pack(
+            side="right", padx=6)
 
         self.var["tipo"].trace_add("write", lambda *_: self._ao_mudar_tipo())
         self.var["dia"].trace_add("write", lambda *_: self._ao_mudar_dia())
@@ -468,9 +512,11 @@ class DialogoImprevisto(tk.Toplevel):
                 widget.grid_remove()
         hoje = self.app.agente.dia_atual
         # tarefa não realizada: hoje ou dias anteriores; demais: hoje em diante
-        self.dias = list(range(0, hoje + 1)) if tipo == "nao_realizada" else list(range(hoje, 7))
+        self.dias = list(range(0, hoje + 1)
+                         ) if tipo == "nao_realizada" else list(range(hoje, 7))
         self.cb_dia["values"] = [DIAS[d] for d in self.dias]
-        self.turnos = (["Dia inteiro"] if tipo == "indisponivel" else ["Qualquer turno"]) + TURNOS
+        self.turnos = (["Dia inteiro"] if tipo == "indisponivel" else [
+                       "Qualquer turno"]) + TURNOS
         self.cb_turno["values"] = self.turnos
         self.var["turno"].set(self.turnos[0])
         self.var["dia"].set(DIAS[hoje])
@@ -485,35 +531,42 @@ class DialogoImprevisto(tk.Toplevel):
         self.cb_ocorrencia["values"] = [
             f"{ag.tarefas[ag.estado[k][0]].nome} — {ag.integrantes[ag.estado[k][1]].nome} "
             f"({TURNOS[ag.estado[k][3]].lower()})" for k in self.ocorrencias]
-        self.var["ocorrencia"].set(self.cb_ocorrencia["values"][0] if self.ocorrencias else "")
+        self.var["ocorrencia"].set(
+            self.cb_ocorrencia["values"][0] if self.ocorrencias else "")
 
     def _confirmar(self) -> None:
         tipo = self._tipo()
         dia = DIAS.index(self.var["dia"].get())
-        turno = TURNOS.index(self.var["turno"].get()) if self.var["turno"].get() in TURNOS else None
+        turno = TURNOS.index(self.var["turno"].get(
+        )) if self.var["turno"].get() in TURNOS else None
         if tipo == "indisponivel":
             nomes = [p.nome for p in self.app.agente.integrantes]
             if self.var["integrante"].get() not in nomes:
-                messagebox.showerror("Imprevisto", "Escolha o integrante.", parent=self)
+                messagebox.showerror(
+                    "Imprevisto", "Escolha o integrante.", parent=self)
                 return
-            imp = Imprevisto(tipo, dia, turno, integrante=nomes.index(self.var["integrante"].get()))
+            imp = Imprevisto(tipo, dia, turno, integrante=nomes.index(
+                self.var["integrante"].get()))
         elif tipo == "extra":
             nome = self.var["nome"].get().strip()
             if not nome:
-                messagebox.showerror("Imprevisto", "Informe o nome da nova tarefa.", parent=self)
+                messagebox.showerror(
+                    "Imprevisto", "Informe o nome da nova tarefa.", parent=self)
                 return
             try:
                 esforco = min(max(int(self.var["esforco"].get()), 1), 5)
             except ValueError:
                 esforco = 2
             tarefa = Tarefa(nome, 1, esforco,
-                            turnos_permitidos=(turno,) if turno is not None else (0, 1, 2),
+                            turnos_permitidos=(
+                                turno,) if turno is not None else (0, 1, 2),
                             dias_permitidos=(dia,), extra=True)
             imp = Imprevisto(tipo, dia, turno, nova_tarefa=tarefa)
         else:
             indice = self.cb_ocorrencia.current()
             if indice < 0:
-                messagebox.showerror("Imprevisto", "Não há tarefa para esse dia.", parent=self)
+                messagebox.showerror(
+                    "Imprevisto", "Não há tarefa para esse dia.", parent=self)
                 return
             imp = Imprevisto(tipo, dia, ocorrencia=self.ocorrencias[indice])
         self.destroy()
@@ -525,11 +578,13 @@ def imprimir_escala(integrantes: list[Integrante], tarefas: list[Tarefa]) -> Non
     print(f"Busca clássica: plano com custo {plano.custo:.1f}, {plano.nos_expandidos} nós expandidos pelo A* "
           f"({plano.nos_sem_heuristica} sem heurística)")
     for p in plano.por_tarefa:
-        horarios = ", ".join(f"{DIAS[d][:3]}-{TURNOS[s][0]}" for d, s in p.horarios)
+        horarios = ", ".join(
+            f"{DIAS[d][:3]}-{TURNOS[s][0]}" for d, s in p.horarios)
         print(f"  {tarefas[p.tarefa].nome:<24} {horarios}")
 
     r = gerar_escala(integrantes, tarefas, plano.horarios)
-    print(f"\nBusca local: custo {r.custo_inicial:.0f} (guloso) -> {r.custo:.0f} (SA) em {r.tempo:.1f}s")
+    print(
+        f"\nBusca local: custo {r.custo_inicial:.0f} (guloso) -> {r.custo:.0f} (SA) em {r.tempo:.1f}s")
     print("Violações:", {k: v for k, v in r.componentes.items() if v})
     for i, p in enumerate(integrantes):
         print(f"\n{p.nome} ({p.cargo})")
@@ -538,16 +593,22 @@ def imprimir_escala(integrantes: list[Integrante], tarefas: list[Tarefa]) -> Non
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Gestão e logística doméstica para república")
-    parser.add_argument("--forms", metavar="CSV", help="CSV exportado das respostas do Google Forms")
-    parser.add_argument("--sheets", metavar="LINK", help="link da planilha de respostas do Google Forms")
-    parser.add_argument("--texto", action="store_true", help="imprime a escala no terminal, sem interface")
-    parser.add_argument("--exemplo-csv", metavar="ARQUIVO", help="gera um CSV de exemplo no formato do Forms")
+    parser = argparse.ArgumentParser(
+        description="Gestão e logística doméstica para república")
+    parser.add_argument("--forms", metavar="CSV",
+                        help="CSV exportado das respostas do Google Forms")
+    parser.add_argument("--sheets", metavar="LINK",
+                        help="link da planilha de respostas do Google Forms")
+    parser.add_argument("--texto", action="store_true",
+                        help="imprime a escala no terminal, sem interface")
+    parser.add_argument("--exemplo-csv", metavar="ARQUIVO",
+                        help="gera um CSV de exemplo no formato do Forms")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
     if args.exemplo_csv:
-        dados.gerar_csv_exemplo(dados.integrantes_simulados(), args.exemplo_csv)
+        dados.gerar_csv_exemplo(
+            dados.integrantes_simulados(), args.exemplo_csv)
         print(f"CSV de exemplo salvo em {args.exemplo_csv}")
         return
 

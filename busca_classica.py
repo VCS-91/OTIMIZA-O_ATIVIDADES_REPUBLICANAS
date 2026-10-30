@@ -23,10 +23,12 @@ from dataclasses import dataclass, field
 from dados import Integrante, Tarefa
 
 PESOS = {
-    "poucos_disponiveis": 10,  # × fração dos integrantes ocupados (aula/trabalho/dia livre) no turno
+    # × fração dos integrantes ocupados (aula/trabalho/dia livre) no turno
+    "poucos_disponiveis": 10,
     "turno_cheio": 6,          # por tarefa já marcada no mesmo turno
     "esforco_no_dia": 1,       # por ponto de esforço já marcado no mesmo dia
-    "espacamento": 4,          # × (intervalo entre repetições - intervalo ideal)²
+    # × (intervalo entre repetições - intervalo ideal)²
+    "espacamento": 4,
     "dependencia": 50,         # pré-requisito ausente no dia ou marcado num turno posterior
     "sem_ninguem": 1000,       # nenhum integrante livre sobrando naquele turno
 }
@@ -43,7 +45,8 @@ class PlanoTarefa:
 
 @dataclass
 class PlanoSemana:
-    horarios: list[tuple[int, int]]  # alinhado com ProblemaEscala.ocorrencias()
+    # alinhado com ProblemaEscala.ocorrencias()
+    horarios: list[tuple[int, int]]
     custo: float
     tempo: float
     por_tarefa: list[PlanoTarefa] = field(default_factory=list)
@@ -81,7 +84,8 @@ def _a_estrela(tarefa: Tarefa, custo_horario: dict[tuple[int, int], float],
     vezes = tarefa.vezes_por_semana
     dias = sorted(tarefa.dias_permitidos)
     if vezes > len(dias):
-        raise ValueError(f"\"{tarefa.nome}\" precisa de {vezes} dias, mas só {len(dias)} são permitidos.")
+        raise ValueError(
+            f"\"{tarefa.nome}\" precisa de {vezes} dias, mas só {len(dias)} são permitidos.")
     ideal = 7 / vezes
     minimo = min(custo_horario.values())
 
@@ -104,7 +108,8 @@ def _a_estrela(tarefa: Tarefa, custo_horario: dict[tuple[int, int], float],
             # depois do último dia usado, e deixando dias suficientes para as próximas ocorrências
             if d <= ultimo or sum(1 for x in dias if x > d) < restantes:
                 continue
-            espaco = PESOS["espacamento"] * (d - ultimo - ideal) ** 2 if ultimo >= 0 else 0
+            espaco = PESOS["espacamento"] * \
+                (d - ultimo - ideal) ** 2 if ultimo >= 0 else 0
             for s in tarefa.turnos_permitidos:
                 g2 = g + custo_horario[d, s] + espaco
                 if g2 < melhor_g.get((marcadas + 1, d), math.inf):
@@ -117,7 +122,8 @@ def _a_estrela(tarefa: Tarefa, custo_horario: dict[tuple[int, int], float],
 def planejar_semana(integrantes: list[Integrante], tarefas: list[Tarefa]) -> PlanoSemana:
     inicio = time.perf_counter()
     total = len(integrantes)
-    disponiveis = {(d, s): sum(p.disponivel(d, s) for p in integrantes) for d in range(7) for s in range(3)}
+    disponiveis = {(d, s): sum(p.disponivel(d, s) for p in integrantes)
+                   for d in range(7) for s in range(3)}
     nomes = {t.nome for t in tarefas}
     ocupacao = Counter()          # tarefas já marcadas em cada (dia, turno)
     esforco_dia = Counter()       # esforço já marcado em cada dia
@@ -139,9 +145,12 @@ def planejar_semana(integrantes: list[Integrante], tarefas: list[Tarefa]) -> Pla
                     c += PESOS["dependencia"]
             return c
 
-        custo_horario = {(d, s): custo(d, s) for d in tarefa.dias_permitidos for s in tarefa.turnos_permitidos}
-        horarios, custo_total, nos = _a_estrela(tarefa, custo_horario, usar_heuristica=True)
-        _, _, nos_ucs = _a_estrela(tarefa, custo_horario, usar_heuristica=False)
+        custo_horario = {(d, s): custo(
+            d, s) for d in tarefa.dias_permitidos for s in tarefa.turnos_permitidos}
+        horarios, custo_total, nos = _a_estrela(
+            tarefa, custo_horario, usar_heuristica=True)
+        _, _, nos_ucs = _a_estrela(
+            tarefa, custo_horario, usar_heuristica=False)
         por_tarefa.append(PlanoTarefa(t, horarios, custo_total, nos, nos_ucs))
         escolhidos[t] = horarios
         for d, s in horarios:

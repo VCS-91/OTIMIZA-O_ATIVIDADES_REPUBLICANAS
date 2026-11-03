@@ -16,7 +16,8 @@ PESOS = {
     "indisponivel": 1000,  # aula, trabalho, compromisso ou dia livre
     "dia_repetido": 1000,  # mesma tarefa duas vezes no mesmo dia
     "choque": 60,          # integrante com duas tarefas no mesmo turno
-    "dependencia": 40,     # ex.: passar pano num dia sem varrer, ou num turno anterior
+    # ex.: passar pano num dia sem varrer, ou no mesmo turno/antes de varrer
+    "dependencia": 40,
     "dias_seguidos": 10,   # tarefa de poucas vezes por semana em dias consecutivos
     # penaliza quem tá trabalhando muito mais que a média da casa (soma dos desvios²)
     "carga": 4,
@@ -91,8 +92,8 @@ class ProblemaEscala:
         c["choque"] = sum(n - 1 for n in por_turno.values())
         for (nome, d), s in turno_da_tarefa.items():
             for dep in self._dependencias.get(nome, ()):
-                # pré-requisito ausente nesse dia ou marcado num turno posterior
-                if dep in self._dependencias and turno_da_tarefa.get((dep, d), math.inf) > s:
+                # pré-requisito ausente nesse dia, ou no mesmo turno / turno posterior
+                if dep in self._dependencias and turno_da_tarefa.get((dep, d), math.inf) >= s:
                     c["dependencia"] += 1
         for t, dias in dias_da_tarefa.items():
             tarefa = self.tarefas[t]

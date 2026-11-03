@@ -2,12 +2,14 @@
 import argparse
 import csv
 import datetime as dt
+import os
 import random
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import dados
+import persistencia
 from busca_classica import planejar_semana
 from busca_local import PESOS, ProblemaEscala, gerar_escala
 from busca_online import AgenteOnline, Imprevisto
@@ -76,8 +78,12 @@ class MultaPinga:
         self.paga = paga
 
 
+MAX_LINHAS_LOG_SALVAS = 500
+
+
 class App(tk.Tk):
-    def __init__(self, integrantes, tarefas, fonte):
+    def __init__(self, integrantes, tarefas, fonte, origem=None, estado_salvo=None,
+                 arquivo_estado=persistencia.ARQUIVO_PADRAO):
         super().__init__()
         self.title("Painel da República — Escala e Organização")
         self.geometry("1460x880")
@@ -87,6 +93,10 @@ class App(tk.Tk):
         self.integrantes = integrantes
         self.tarefas = tarefas
         self.fonte = fonte
+        # de onde vieram os horários, para reler o Forms quando a semana virar:
+        # {"tipo": "simulado"} | {"tipo": "csv", "ref": caminho} | {"tipo": "sheets", "ref": link}
+        self.origem = origem or {"tipo": "simulado"}
+        self.arquivo_estado = arquivo_estado
         self.rng = random.Random()
         self.data_real = dt.date.today()
         self.plano = None
@@ -96,10 +106,25 @@ class App(tk.Tk):
         self.concluidas = set()
         self.multas = []
         self._seq_multa = 1
+        self._entradas_log = []
+        self._erro_ao_salvar = False
 
         self._configurar_estilo()
         self._montar()
-        self.nova_escala(self.data_real.weekday())
+        self.protocol("WM_DELETE_WINDOW", self._fechar)
+
+        recuperado = False
+        if estado_salvo:
+            try:
+                self._restaurar(estado_salvo)
+                recuperado = True
+            except Exception as erro:
+                self.integrantes, self.multas, self.concluidas = integrantes, [], set()
+                self._log(f"⚠ Não deu para recuperar a escala salva ({erro}). Montando uma nova.", "erro")
+        if recuperado:
+            self._sincronizar_data()
+        else:
+            self.nova_escala(self.data_real.weekday())
         self.after(60000, self._verificar_data)
 
     def _configurar_estilo(self):
@@ -699,7 +724,7 @@ class App(tk.Tk):
     def avancar_dia(self):
         if self.agente.dia_atual == 6:
             self._log("─── Domingou! Virando a folha para uma nova semana ───", "destaque")
-            self.nova_escala(0)
+            self._nova_semana(0)
             return
         for k, a in enumerate(self.agente.estado):
             if a is not None and a[2] == self.agente.dia_atual and k not in self.agente.nao_realizadas:
@@ -709,18 +734,74 @@ class App(tk.Tk):
         self.atualizar()
 
     def _verificar_data(self):
+        self._sincronizar_data()
+        self.after(60000, self._verificar_data)
+
+    def _sincronizar_data(self):
+        """Avança a escala pelos dias que passaram desde a última vez (inclusive com
+        o programa fechado). Se a semana virou nesse meio-tempo, monta a semana nova
+        já no dia da semana de hoje."""
         hoje = dt.date.today()
         dias_passados = (hoje - self.data_real).days
-        if dias_passados > 7:
-            dias_passados = 7
+        if dias_passados <= 0:
+            return
+        self.data_real = hoje
+        if self.agente.dia_atual + dias_passados > 6:
+            self._log(
+                f"─── A semana virou ({dias_passados} dia(s) desde o último acesso). Montando a semana nova ───",
+                "destaque",
+            )
+            self._nova_semana(hoje.weekday())
+            return
         for _ in range(dias_passados):
             self.avancar_dia()
-        self.data_real = hoje
-        self.after(60000, self._verificar_data)
+
+    def _nova_semana(self, dia):
+        """Relê o Forms (se os horários vieram de lá) e monta a escala da nova semana."""
+        self._reler_forms()
+        self.nova_escala(dia)
+
+    def _reler_forms(self):
+        tipo, ref = self.origem.get("tipo"), self.origem.get("ref")
+        if tipo not in ("csv", "sheets") or not ref:
+            return
+        try:
+            if tipo == "csv":
+                integrantes, avisos = dados.carregar_forms_arquivo(ref)
+            else:
+                integrantes, avisos = dados.carregar_forms_google_sheets(ref)
+        except Exception as erro:
+            self._log(
+                f"⚠ Não deu para reler o Forms na virada da semana ({erro}). Mantendo os horários anteriores.",
+                "erro",
+            )
+            return
+        self._remapear_multas(integrantes)
+        self.integrantes = integrantes
+        self._log(f"📥 Respostas do Forms relidas para a nova semana ({len(integrantes)} moradores).", "destaque")
+        for aviso in avisos:
+            self._log(f"  ⚠ Atenção na regra da casa: {aviso}", "imprevisto")
+
+    def _remapear_multas(self, novos):
+        """As multas guardam a posição do morador na lista; ao reler o Forms a
+        ordem pode mudar, então elas são reassociadas pelo nome."""
+        posicao = {p.nome.strip().casefold(): i for i, p in enumerate(novos)}
+        mantidas, saiu = [], set()
+        for m in self.multas:
+            nome = self.integrantes[m.integrante].nome
+            j = posicao.get(nome.strip().casefold())
+            if j is None:
+                saiu.add(nome)
+                continue
+            m.integrante = j
+            mantidas.append(m)
+        self.multas = mantidas
+        for nome in sorted(saiu):
+            self._log(f"  🚪 {nome} não está mais nas respostas do Forms; as multas dele foram retiradas.")
 
     def usar_simulados(self):
         self.multas.clear()
-        self._usar_integrantes(dados.integrantes_simulados(), [], "Dados de Exemplo")
+        self._usar_integrantes(dados.integrantes_simulados(), [], "Dados de Exemplo", {"tipo": "simulado"})
 
     def importar_csv(self):
         caminho = filedialog.askopenfilename(
@@ -735,7 +816,9 @@ class App(tk.Tk):
             return
         self.multas.clear()
         nome_arq = caminho.split("/")[-1]
-        self._usar_integrantes(integrantes, avisos, f"Forms ({nome_arq})")
+        self._usar_integrantes(
+            integrantes, avisos, f"Forms ({nome_arq})", {"tipo": "csv", "ref": os.path.abspath(caminho)}
+        )
 
     def importar_sheets(self):
         url = simpledialog.askstring(
@@ -752,11 +835,14 @@ class App(tk.Tk):
             messagebox.showerror("Erro ao ler a planilha", str(erro))
             return
         self.multas.clear()
-        self._usar_integrantes(integrantes, avisos, "Planilha Online da República")
+        self._usar_integrantes(
+            integrantes, avisos, "Planilha Online da República", {"tipo": "sheets", "ref": url.strip()}
+        )
 
-    def _usar_integrantes(self, integrantes, avisos, fonte):
+    def _usar_integrantes(self, integrantes, avisos, fonte, origem):
         self.integrantes = integrantes
         self.fonte = fonte
+        self.origem = origem
         self._log(f"📥 Horários atualizados via {fonte} ({len(integrantes)} moradores).", "destaque")
         for aviso in avisos:
             self._log(f"  ⚠ Atenção na regra da casa: {aviso}", "imprevisto")
@@ -770,6 +856,9 @@ class App(tk.Tk):
 
         # Se a tarefa nao foi feita, anota 1 dose de pinga pro responsavel antes de replanejar
         if imp.tipo == "nao_realizada" and imp.ocorrencia is not None:
+            # Vale para qualquer origem (botão "Não fez", janela de imprevisto ou
+            # "Simular B.O."): se a tarefa estava marcada como feita, deixa de estar.
+            self.concluidas.discard(imp.ocorrencia)
             t_orig, i_orig, d_orig, _ = ag.estado[imp.ocorrencia]
             nome_tarefa = ag.tarefas[t_orig].nome
             self._aplicar_multa_pinga(i_orig, d_orig, f"Deu migué em: {nome_tarefa}")
@@ -845,6 +934,63 @@ class App(tk.Tk):
 
         cor_pin = COR["pinga"] if doses_pendentes > 0 else COR["sucesso"]
         self.kpi_pinga.configure(text=f"{doses_pendentes} dose(s)", fg=cor_pin)
+
+        # Toda ação passa por aqui, então salvar aqui mantém o arquivo sempre em dia.
+        self._salvar()
+
+    # ------------------------------------------------------------ salvar / recuperar
+
+    def _estado_para_salvar(self):
+        return {
+            "data_real": self.data_real.isoformat(),
+            "fonte": self.fonte,
+            "origem": self.origem,
+            "integrantes": [persistencia.integrante_para_dict(p) for p in self.integrantes],
+            "tarefas": [persistencia.tarefa_para_dict(t) for t in self.tarefas],
+            "plano": persistencia.plano_para_dict(self.plano),
+            "resultado": persistencia.resultado_para_dict(self.resultado),
+            "agente": persistencia.agente_para_dict(self.agente),
+            "concluidas": sorted(self.concluidas),
+            "multas": [vars(m) for m in self.multas],
+            "seq_multa": self._seq_multa,
+            "log": self._entradas_log[-MAX_LINHAS_LOG_SALVAS:],
+        }
+
+    def _salvar(self):
+        if self.arquivo_estado is None or self.agente is None:
+            return
+        try:
+            persistencia.salvar(self._estado_para_salvar(), self.arquivo_estado)
+            self._erro_ao_salvar = False
+        except Exception as erro:
+            if not self._erro_ao_salvar:  # avisa uma vez só, não a cada clique
+                self._erro_ao_salvar = True
+                self._log(f"⚠ Não deu para salvar a escala em {self.arquivo_estado}: {erro}", "erro")
+
+    def _restaurar(self, e):
+        # Converte tudo primeiro; só mexe no painel se nada deu erro.
+        integrantes = [persistencia.integrante_de_dict(x) for x in e["integrantes"]]
+        tarefas = [persistencia.tarefa_de_dict(x) for x in e["tarefas"]]
+        plano = persistencia.plano_de_dict(e["plano"])
+        resultado = persistencia.resultado_de_dict(e["resultado"])
+        agente = persistencia.agente_de_dict(e["agente"])
+        multas = [MultaPinga(**m) for m in e["multas"]]
+        data_real = dt.date.fromisoformat(e["data_real"])
+
+        self.integrantes, self.tarefas = integrantes, tarefas
+        self.plano, self.resultado, self.agente = plano, resultado, agente
+        self.multas, self._seq_multa = multas, e["seq_multa"]
+        self.concluidas = set(e["concluidas"])
+        self.fonte, self.origem = e["fonte"], e["origem"]
+        self.data_real = data_real
+        for texto, tag in e.get("log", []):
+            self._log(texto, tag)
+        self._log(f"💾 Escala recuperada do arquivo salvo (último acesso em {data_real:%d/%m/%Y}).", "destaque")
+        self.atualizar()
+
+    def _fechar(self):
+        self._salvar()
+        self.destroy()
 
     def _desenhar_checkin_hoje(self):
         for w in self.container_checkin.winfo_children():
@@ -1364,7 +1510,8 @@ class App(tk.Tk):
                 ),
             )
         self.info_plano.set(
-            f"Total A*: Custo = {self.plano.custo:.1f}  |  "
+            f"Custo global da semana: {self.plano.custo_inicial:.1f} (1ª passada) → {self.plano.custo:.1f} "
+            f"após {self.plano.rodadas} rodada(s) de refino\n"
             f"Nós A* (com h(n)) = {self.plano.nos_expandidos}  |  "
             f"Nós UCS (sem h(n)) = {self.plano.nos_sem_heuristica}  |  "
             f"Tempo = {self.plano.tempo * 1000:.1f} ms"
@@ -1400,6 +1547,9 @@ class App(tk.Tk):
         return f"\"{nome}\" passou de {formatar(m.antes)} para {formatar(m.depois)}"
 
     def _log(self, texto, tag=None):
+        self._entradas_log.append((texto, tag))
+        if len(self._entradas_log) > 2 * MAX_LINHAS_LOG_SALVAS:
+            del self._entradas_log[:-MAX_LINHAS_LOG_SALVAS]
         self.log.configure(state="normal")
         if tag:
             self.log.insert("end", texto + "\n", tag)
@@ -1686,6 +1836,7 @@ def main():
     parser.add_argument("--sheets", metavar="LINK", help="link da planilha de respostas do Google Forms")
     parser.add_argument("--texto", action="store_true", help="imprime a escala no terminal, sem interface")
     parser.add_argument("--exemplo-csv", metavar="ARQUIVO", help="gera um CSV de exemplo no formato do Forms")
+    parser.add_argument("--novo", action="store_true", help="ignora a escala salva e começa do zero")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -1698,12 +1849,15 @@ def main():
     if args.forms:
         integrantes, avisos = dados.carregar_forms_arquivo(args.forms)
         fonte = f"Google Forms ({args.forms})"
+        origem = {"tipo": "csv", "ref": os.path.abspath(args.forms)}
     elif args.sheets:
         integrantes, avisos = dados.carregar_forms_google_sheets(args.sheets)
         fonte = "Google Forms (planilha online)"
+        origem = {"tipo": "sheets", "ref": args.sheets}
     else:
         integrantes = dados.integrantes_simulados()
         fonte = "Dados simulados"
+        origem = None
 
     for aviso in avisos:
         print("Aviso:", aviso)
@@ -1711,7 +1865,19 @@ def main():
     if args.texto:
         imprimir_escala(integrantes, dados.tarefas_padrao())
         return
-    App(integrantes, dados.tarefas_padrao(), fonte).mainloop()
+
+    # Retoma a escala salva, a não ser que se peça --novo ou que se aponte
+    # outra fonte de horários (--forms/--sheets diferente da salva).
+    estado_salvo = None
+    if not args.novo:
+        try:
+            estado_salvo = persistencia.carregar()
+        except Exception as erro:
+            print("Aviso: não deu para ler a escala salva, começando do zero:", erro)
+        if estado_salvo and origem is not None and estado_salvo.get("origem") != origem:
+            print("Aviso: fonte de horários diferente da escala salva; começando uma escala nova.")
+            estado_salvo = None
+    App(integrantes, dados.tarefas_padrao(), fonte, origem, estado_salvo).mainloop()
 
 
 if __name__ == "__main__":

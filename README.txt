@@ -36,11 +36,20 @@ diariamente de acordo com a situação dos integrantes.
 Requisitos: Python 3.10 ou superior, com tkinter (já vem com o instalador
 oficial do Python no Windows). Não há dependências externas.
 
-  python main.py                          abre a interface com dados simulados
+  python main.py                          abre a interface (retoma a escala salva, se houver)
   python main.py --forms respostas.csv    abre a interface com as respostas do Forms
   python main.py --sheets <link>          lê direto da planilha de respostas do Forms
+  python main.py --novo                   ignora a escala salva e começa do zero
   python main.py --texto                  imprime o plano e a escala no terminal
   python main.py --exemplo-csv saida.csv  gera um CSV de exemplo no formato do Forms
+
+Para enviar as alterações ao GitHub (commit + pull + push), dê dois
+cliques em atualizar_github.bat, ou rode no terminal, na pasta do projeto:
+  .\atualizar_github.bat "mensagem do commit"
+
+A escala fica salva no arquivo estado_republica.json, na pasta do projeto
+(veja a seção 8). Com --forms ou --sheets, a escala salva só é retomada se
+tiver vindo da mesma fonte; se a fonte for outra, começa uma escala nova.
 
 
 ---------------------------------------------------------------------
@@ -52,6 +61,8 @@ oficial do Python no Windows). Não há dependências externas.
   busca_classica.py            agente de Busca Clássica (A*)
   busca_local.py               agente de Busca Local (guloso + Simulated Annealing)
   busca_online.py              agente de Busca Online (replanejamento com imprevistos)
+  persistencia.py              salva e recupera a escala (estado_republica.json)
+  atualizar_github.bat         faz commit e envia as alterações para o GitHub
   exemplo_respostas_forms.csv  exemplo do formato das respostas do Forms
 
 O fluxo do sistema é:
@@ -108,9 +119,10 @@ O fluxo do sistema é:
     - esforço (peso de 1 a 5);
     - turnos e dias permitidos (ex.: o lixo só sai na segunda, quarta e
       sexta, à noite);
-    - dependências: tarefas que, no mesmo dia, precisam vir antes
-      (ex.: varrer antes de passar pano; lavar a louça antes de limpar
-      o fogão).
+    - dependências: tarefas que, no mesmo dia, precisam vir antes, num
+      turno anterior (ex.: varrer antes de passar pano; lavar a louça
+      antes de limpar o fogão). Como o pré-requisito fica sempre num turno
+      anterior, a ordem de execução dentro do dia fica explícita na escala.
 
   As tarefas cadastradas são lavar louça (7x), limpar fogão e bancada (2x),
   varrer a casa (3x), passar pano (2x), limpar banheiro (2x), levar o
@@ -153,8 +165,12 @@ Função: definir a melhor ordem de execução das tarefas, isto é, em que dia
 e turno cada ocorrência acontece. Nesta etapa ainda não se escolhe quem
 executa a tarefa.
 
-5.1 Decomposição
-  As tarefas são planejadas uma de cada vez, numa ordem fixa:
+5.1 Decomposição e refino
+  Buscar a semana inteira de uma vez não é viável: são 23 ocorrências, cada
+  uma com até 21 horários. Por isso o problema é dividido por tarefa, em
+  duas fases.
+
+  1ª passada: as tarefas são planejadas uma de cada vez, numa ordem fixa:
     1) primeiro os pré-requisitos (ex.: "Varrer a casa" antes de "Passar
        pano"), para que as dependências possam ser verificadas;
     2) depois as tarefas mais restritas, com menos horários possíveis por
@@ -162,6 +178,9 @@ executa a tarefa.
     3) em caso de empate, as de maior esforço.
   Cada tarefa planejada passa a ocupar os seus horários, o que influencia
   o custo das tarefas seguintes.
+
+  Refino: depois da 1ª passada, cada tarefa é replanejada pelo A* vendo
+  a semana inteira. O que é e por que foi feito está na seção 5.5.
 
 5.2 Formulação do problema de busca (para cada tarefa)
   Estado:   (ocorrências já marcadas, último dia usado)
@@ -171,16 +190,25 @@ executa a tarefa.
             Como os dias são sempre crescentes, a mesma tarefa nunca se
             repete no mesmo dia e não há permutações equivalentes.
   Objetivo: todas as ocorrências semanais da tarefa marcadas.
-  Custo:    soma dos custos dos horários escolhidos:
+  Custo:    soma dos custos dos horários escolhidos ("outras tarefas" são
+            as já planejadas na 1ª passada, ou todas as demais no refino):
 
     poucos disponíveis  10 x fração dos integrantes ocupados no turno
-    turno cheio          6 por tarefa já marcada no mesmo turno
-    esforço no dia       1 por ponto de esforço já marcado no mesmo dia
+    turno cheio          6 por outra tarefa marcada no mesmo turno
+    esforço no dia     0,5 x esforço da tarefa x esforço das outras
+                         tarefas marcadas no mesmo dia
     espaçamento          4 x (intervalo entre repetições - intervalo ideal)²,
                          onde o intervalo ideal = 7 / vezes por semana
-    dependência         50 se o pré-requisito não está no dia, ou está num
-                         turno posterior
+    dependência         50 se o pré-requisito não está no dia, ou está no
+                         mesmo turno ou num turno posterior; no refino, vale
+                         também para o pré-requisito que não "cobre" a
+                         tarefa que depende dele
     sem ninguém       1000 se não sobra nenhum integrante livre no turno
+
+  O custo global da semana soma os mesmos termos contando cada par de
+  tarefas uma vez só (turno cheio e esforço no dia são custos por par).
+  Na interface, o custo de cada tarefa é o quanto ela acrescenta ao custo
+  global, na ordem de planejamento; a soma da coluna é o custo global.
 
 5.3 Algoritmo: A*
   f(n) = g(n) + h(n), em que g(n) é o custo acumulado e
@@ -192,10 +220,74 @@ executa a tarefa.
 
   Para comparação, o mesmo subproblema também é resolvido sem heurística
   (h = 0, ou seja, Busca de Custo Uniforme). A interface mostra os nós
-  expandidos pelos dois. Com os dados simulados, o A* expande 37 nós e a
-  busca de custo uniforme expande 41. A diferença é pequena porque cada
-  tarefa tem poucas combinações de horário, e tende a crescer com mais
-  tarefas e repetições.
+  expandidos pelos dois, somando a 1ª passada e o refino. Com os dados
+  simulados, o A* expande 90 nós e a busca de custo uniforme expande 111.
+  A diferença é pequena porque cada tarefa tem poucas combinações de
+  horário, e tende a crescer com mais tarefas e repetições.
+
+5.4 Garantia de otimalidade
+  - Para cada tarefa, com as outras fixas, o A* é ótimo (heurística
+    admissível).
+  - Para a semana inteira, o resultado é um ótimo local: nenhuma tarefa
+    consegue diminuir o custo global mudando sozinha os seus horários.
+    Não é garantido que seja o ótimo global, que exigiria buscar todas as
+    tarefas juntas, num espaço grande demais.
+
+5.5 Refino da semana: o que é e por que foi feito
+  O que é
+    O refino é uma segunda fase da Busca Clássica, executada depois que
+    todas as tarefas já receberam dia e turno na 1ª passada. Ele funciona
+    assim:
+      1) pega uma tarefa e "apaga" os horários dela, deixando todas as
+         outras tarefas da semana fixas no lugar;
+      2) roda o A* de novo para essa tarefa, agora levando em conta a
+         semana inteira (inclusive as tarefas planejadas depois dela);
+      3) se o novo plano deixar o custo global da semana menor, ele
+         substitui o antigo; se não, o antigo é mantido;
+      4) faz isso para todas as tarefas. Essa volta completa é uma
+         "rodada". As rodadas se repetem até uma rodada inteira passar
+         sem nenhuma melhora (no máximo 10 rodadas).
+    É a mesma ideia da "descida por coordenadas": melhorar uma parte do
+    problema por vez, com o resto parado, até nenhuma parte melhorar.
+
+  Por que foi feito
+    Na 1ª passada, cada tarefa só "enxerga" as tarefas planejadas antes
+    dela. A primeira tarefa da ordem escolhe os horários com a semana
+    vazia, sem saber que depois virão outras tarefas disputando os mesmos
+    turnos. Exemplo: "Varrer a casa" é planejada antes de "Passar pano" e
+    pode ocupar um turno que seria melhor para outra tarefa, porque ainda
+    não sabe que esse turno vai ficar cheio. Depois de marcada, ela nunca
+    mais era revista. O resultado dependia muito da ordem de planejamento,
+    e o A* garantia o ótimo de cada tarefa isolada, mas não um bom plano
+    para a semana. O refino corrige isso: cada tarefa ganha a chance de
+    rever a sua escolha sabendo onde todas as outras ficaram.
+
+  Por que ele nunca piora a semana
+    O custo de cada horário usado pelo A* foi reformulado para ser
+    exatamente o quanto o custo global da semana aumenta quando a tarefa
+    é colocada ali (a menos de uma constante, que não muda a escolha).
+    Para isso, foram feitas duas mudanças:
+      - o termo "esforço no dia" passou a ser calculado por par de tarefas
+        (esforço de uma x esforço da outra), para valer o mesmo não importa
+        qual das duas é planejada primeiro;
+      - uma tarefa que é pré-requisito passou a "ver" quem depende dela
+        (ex.: "Varrer a casa" sabe em que dias e turnos está o "Passar
+        pano" e prefere ficar num turno anterior a ele).
+    Com isso, o melhor caminho que o A* encontra para uma tarefa é também
+    a melhor escolha para a semana, com as outras fixas. Como só se aceita
+    troca que diminui o custo global, cada rodada melhora a semana ou
+    mantém como está, e o processo sempre termina.
+
+  Resultado com os dados simulados
+    Custo global da semana: 173,5 na 1ª passada e 166,5 depois de 2
+    rodadas de refino. Com esse esqueleto melhor, o custo da escala final
+    (Busca Local) caiu de cerca de 48 para 27. A aba "Bastidores" da
+    interface mostra o custo antes e depois do refino e o número de rodadas.
+
+  Limite
+    O refino chega a um ótimo local: nenhuma tarefa melhora mudando
+    sozinha. Uma melhora que exigisse mudar duas tarefas ao mesmo tempo
+    não é encontrada (seção 5.4).
 
 
 ---------------------------------------------------------------------
@@ -215,7 +307,8 @@ compromissos). O dia e o turno de cada ocorrência vêm da Busca Clássica.
     indisponível   1000  tarefa em horário de aula/trabalho ou em dia livre (rígida)
     dia repetido   1000  mesma tarefa duas vezes no mesmo dia (rígida)
     choque           60  integrante com duas tarefas no mesmo turno
-    dependência      40  pré-requisito ausente no dia ou em turno posterior
+    dependência      40  pré-requisito ausente no dia, no mesmo turno ou
+                         em turno posterior
     dias seguidos    10  tarefa de até 3x/semana em dias consecutivos
     carga             4  soma dos (esforço do integrante - média)²
     preferência       3  x nível hierárquico, quando a tarefa cai fora
@@ -237,9 +330,9 @@ compromissos). O dia e o turno de cada ocorrência vêm da Busca Clássica.
        - uma piora de custo delta é aceita com probabilidade exp(-delta/T),
          o que permite sair de mínimos locais.
 
-  Com os dados simulados, o custo cai de cerca de 100 a 120 (solução
-  gulosa) para cerca de 50 em menos de 1 segundo, sem nenhuma restrição
-  rígida violada.
+  Com os dados simulados, o custo cai de cerca de 60 a 95 (solução
+  gulosa) para 27 em cerca de 1 segundo, sem nenhuma restrição rígida nem
+  dependência violada.
 
 
 ---------------------------------------------------------------------
@@ -321,6 +414,26 @@ Atualização diária: a escala começa no dia da semana atual. Se o programa
 ficar aberto quando a data mudar, ele avança o dia automaticamente (a data
 é verificada a cada minuto).
 
+Escala salva (persistência): depois de cada ação (tarefa feita, imprevisto,
+multa, dia avançado...) e ao fechar a janela, o estado completo é gravado
+em estado_republica.json: a escala, os imprevistos e as trocas da semana,
+as tarefas concluídas, o pingômetro e o mural. A gravação é feita num
+arquivo temporário que depois substitui o anterior, para o arquivo nunca
+ficar pela metade. Ao abrir o programa de novo:
+  - a escala é recuperada;
+  - os dias que passaram com o programa fechado são avançados;
+  - se a semana virou nesse meio-tempo, uma semana nova é montada já no
+    dia de hoje.
+Se o arquivo estiver corrompido, o programa avisa e começa uma escala nova.
+O arquivo está no .gitignore, porque é um dado local da república.
+
+Releitura do Forms: quando a semana vira, se os horários vieram de um CSV
+ou da planilha online, as respostas do Forms são lidas de novo antes de
+montar a nova semana. Assim, mudanças de grade de aula entram sozinhas.
+As multas do pingômetro continuam com cada morador (são reassociadas pelo
+nome). Se não der para ler o Forms (sem internet, arquivo apagado), os
+horários anteriores são mantidos e o problema aparece no mural.
+
 
 ---------------------------------------------------------------------
 9. HISTÓRICO DE DESENVOLVIMENTO
@@ -344,6 +457,10 @@ ficar aberto quando a data mudar, ele avança o dia automaticamente (a data
      Os papéis de cada agente ficaram separados.
   5) Ajuste: a penalidade de dependência passou a valer igual nas três
      buscas (pré-requisito ausente no dia ou em turno posterior).
+  6) Revisão contra a proposta e correções (detalhes na seção 11):
+     persistência da escala e releitura semanal do Forms, correção do
+     estado de tarefas concluídas que viram migué, e refino da Busca
+     Clássica com dependências em turnos estritamente anteriores.
 
 Testes realizados: execução no modo texto; geração do CSV de exemplo e
 importação dele de volta; simulação de várias semanas com imprevistos
@@ -361,8 +478,80 @@ restrição rígida.
   - Os pesos das funções de custo e a quantidade de dias livres por nível
     foram definidos de forma empírica e podem ser recalibrados (PESOS em
     busca_classica.py e busca_local.py; MAX_DIAS_LIVRES em dados.py).
-  - A Busca Clássica é ótima para cada tarefa, dada a ordem de
-    planejamento, mas não necessariamente para a semana inteira de uma
-    vez.
+  - A Busca Clássica é ótima para cada tarefa com as outras fixas, e a
+    semana chega a um ótimo local (nenhuma tarefa melhora sozinha), mas
+    não há garantia de ótimo global (seção 5.4).
   - Os imprevistos valem só para a semana corrente. Ao gerar uma nova
-    semana, valem de novo os dados originais do Forms.
+    semana, valem de novo os dados do Forms (relidos na virada da semana).
+  - O Forms é relido só na virada da semana. Uma mudança de grade no meio
+    da semana deve ser lançada como imprevisto ("Morador deu baixa").
+  - Se o botão "Passar Dia" for usado à mão, o dia da escala pode ficar à
+    frente da data real, e a virada automática de data continua avançando
+    a partir dele.
+
+
+---------------------------------------------------------------------
+11. CORREÇÕES FEITAS NA REVISÃO
+---------------------------------------------------------------------
+
+O código foi conferido contra a proposta do trabalho (objetivo, entrada,
+limites, papel de cada busca e saída) e todas as funcionalidades foram
+testadas. Estes problemas foram encontrados e corrigidos:
+
+11.1 A escala não era salva (Saída: "tabela atualizada diariamente")
+  Problema: tudo ficava só na memória. Ao fechar o programa, perdiam-se a
+  escala, os imprevistos, as tarefas concluídas, o pingômetro e o mural.
+  A tabela só era "atualizada diariamente" se o programa ficasse aberto o
+  tempo todo, e o Forms nunca era relido sozinho.
+  Correção: novo módulo persistencia.py e salvamento automático em
+  estado_republica.json; ao reabrir, a escala é recuperada e os dias
+  passados são compensados (inclusive a virada de semana); o Forms é
+  relido na virada de cada semana, mantendo as multas de cada morador.
+  Também foi criada a opção --novo, para começar do zero. Detalhes na
+  seção 8.
+
+11.2 Tarefa concluída e não feita ao mesmo tempo
+  Problema: se uma tarefa já marcada como feita era registrada como "não
+  foi feita" pela janela de imprevisto ou pelo "Simular B.O.", ela
+  continuava na lista de concluídas. O card do dia ficava verde
+  ("Concluída") mesmo com a dose de pinga aplicada e a tarefa
+  realocada. Só o botão "Não fez" tratava esse caso.
+  Correção: o tratamento passou para registrar_imprevisto (main.py), por
+  onde passam todos os caminhos. Toda tarefa registrada como não feita
+  sai da lista de concluídas.
+
+11.3 Busca Clássica: ordem dentro do dia e otimalidade da semana
+  Problema 1: a dependência aceitava o pré-requisito no mesmo turno. Por
+  isso "Varrer a casa" e "Passar pano" chegavam a cair os dois no
+  sábado à noite, com pessoas diferentes, sem uma ordem definida entre
+  eles.
+  Correção 1: o pré-requisito precisa estar num turno estritamente
+  anterior, na Busca Clássica e na função de custo da Busca Local (que a
+  Busca Online também usa). Agora varrer cai de manhã e passar pano à
+  tarde ou à noite, e a ordem de execução aparece na própria escala.
+  Problema 2: as tarefas eram planejadas uma de cada vez, e uma tarefa
+  planejada cedo não levava em conta as seguintes. O plano não era
+  ótimo nem localmente para a semana.
+  Correção 2: foi criada a fase de refino (explicada na seção 5.5). Os custos do A*
+  foram reformulados para coincidir com a variação do custo global. Por
+  isso o termo "esforço no dia" passou a ser por par de tarefas e o
+  pré-requisito passou a enxergar quem depende dele. O resultado é um
+  ótimo local da semana. Com os dados simulados, o custo da Busca
+  Clássica caiu de 173,5 para 166,5. Com o novo esqueleto, o custo final
+  da escala (Busca Local) caiu de cerca de 48 para 27.
+
+Como as correções foram verificadas:
+  - escala fechada e reaberta: estado idêntico (escala, imprevistos,
+    concluídas, pingômetro, mural);
+  - reabertura 2 e 20 dias depois: o dia da escala volta a coincidir com
+    a data real;
+  - virada de semana com o CSV do Forms alterado: horários novos lidos,
+    morador removido sai da escala, multas dos demais preservadas; com o
+    CSV apagado, os horários anteriores são mantidos;
+  - arquivo de estado corrompido: o programa começa do zero sem travar;
+  - tarefa concluída depois registrada como não feita: sai das concluídas;
+  - Busca Clássica: em 300 trocas aleatórias de plano, a variação do
+    custo do A* foi igual à do custo global; nenhuma tarefa melhora
+    sozinha no plano final; nenhuma dependência no mesmo turno;
+  - 3 semanas simuladas com 3 imprevistos por dia: nenhuma restrição
+    rígida violada e nenhuma tarefa sem responsável.

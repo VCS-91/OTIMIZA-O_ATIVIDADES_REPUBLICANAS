@@ -1,28 +1,17 @@
-"""Sistema de Gestão, Escala da República.
-
-Uso:
-    python main.py                           # interface com dados simulados
-    python main.py --forms respostas.csv     # interface com as respostas do Google Forms
-    python main.py --sheets <link>           # idem, lendo direto da planilha de respostas
-    python main.py --texto                   # imprime a escala no terminal, sem interface
-    python main.py --exemplo-csv saida.csv   # gera um CSV no formato do Forms e sai
-"""
-from __future__ import annotations
-
+# Interface principal do sistema da republica e controle do pingometro
 import argparse
 import csv
 import datetime as dt
 import random
 import sys
 import tkinter as tk
-from dataclasses import dataclass
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import dados
 from busca_classica import planejar_semana
 from busca_local import PESOS, ProblemaEscala, gerar_escala
-from busca_online import AgenteOnline, Imprevisto, Mudanca
-from dados import DIAS, TURNOS, Integrante, Tarefa
+from busca_online import AgenteOnline, Imprevisto
+from dados import DIAS, TURNOS
 
 COR = {
     "bg_janela": "#f4f6f9",
@@ -77,20 +66,20 @@ NOMES_PENALIDADES_HUMANOS = {
 }
 
 
-@dataclass
 class MultaPinga:
-    id_multa: int
-    integrante: int
-    dia: int
-    motivo: str
-    doses: int = 1
-    paga: bool = False
+    def __init__(self, id_multa, integrante, dia, motivo, doses=1, paga=False):
+        self.id_multa = id_multa
+        self.integrante = integrante
+        self.dia = dia
+        self.motivo = motivo
+        self.doses = doses
+        self.paga = paga
 
 
 class App(tk.Tk):
-    def __init__(self, integrantes: list[Integrante], tarefas: list[Tarefa], fonte: str):
+    def __init__(self, integrantes, tarefas, fonte):
         super().__init__()
-        self.title("Painel da República — Escala, Organização")
+        self.title("Painel da República — Escala e Organização")
         self.geometry("1460x880")
         self.minsize(1200, 700)
         self.configure(bg=COR["bg_janela"])
@@ -102,21 +91,18 @@ class App(tk.Tk):
         self.data_real = dt.date.today()
         self.plano = None
         self.resultado = None
-        self.agente: AgenteOnline | None = None
+        self.agente = None
 
-        # Controle de tarefas concluídas e multas do Pingômetro
-        self.concluidas: set[int] = set()
-        self.multas: list[MultaPinga] = []
+        self.concluidas = set()
+        self.multas = []
         self._seq_multa = 1
 
         self._configurar_estilo()
         self._montar()
         self.nova_escala(self.data_real.weekday())
-        self.after(60_000, self._verificar_data)
+        self.after(60000, self._verificar_data)
 
-    # ------------------------------------------------------------ 
-
-    def _configurar_estilo(self) -> None:
+    def _configurar_estilo(self):
         estilo = ttk.Style(self)
         if "clam" in estilo.theme_names():
             estilo.theme_use("clam")
@@ -124,7 +110,6 @@ class App(tk.Tk):
         estilo.configure(".", background=COR["bg_janela"], foreground=COR["texto"], font=FONTE)
         estilo.configure("TFrame", background=COR["bg_janela"])
 
-        # Abas
         estilo.configure("TNotebook", background=COR["bg_janela"], borderwidth=0)
         estilo.configure(
             "TNotebook.Tab",
@@ -140,7 +125,6 @@ class App(tk.Tk):
             foreground=[("selected", COR["primaria"]), ("active", COR["texto"])],
         )
 
-        # Botões
         estilo.configure(
             "TButton",
             font=FONTE,
@@ -181,7 +165,6 @@ class App(tk.Tk):
         )
         estilo.map("Alerta.TButton", background=[("active", "#ffedd5")])
 
-        # Tabelas
         estilo.configure(
             "Treeview",
             font=FONTE,
@@ -204,10 +187,7 @@ class App(tk.Tk):
         estilo.configure("TLabelframe", background=COR["bg_card"], bordercolor=COR["borda"])
         estilo.configure("TLabelframe.Label", background=COR["bg_card"], foreground=COR["texto"], font=FONTE_NEGRITO)
 
-    # ------------------------------------------------------------ montagem
-
-    def _montar(self) -> None:
-        # Banner Superior da República
+    def _montar(self):
         topo = tk.Frame(self, bg=COR["cabecalho"], padx=18, pady=12)
         topo.pack(fill="x")
 
@@ -228,7 +208,6 @@ class App(tk.Tk):
             fg="#94a3b8",
         ).pack(anchor="w")
 
-        # Barra de Controles Amigáveis + Indicadores da Casa
         painel_controle = ttk.Frame(self, padding=(14, 10))
         painel_controle.pack(fill="x")
 
@@ -255,7 +234,6 @@ class App(tk.Tk):
         ttk.Button(grupo_acoes, text="🎲 Simular B.O.", command=self.imprevisto_aleatorio).pack(side="left", padx=3)
         ttk.Button(grupo_acoes, text="Passar Dia ▶", command=self.avancar_dia).pack(side="left", padx=3)
 
-        # Indicadores Humanos à direita
         kpis = ttk.Frame(painel_controle)
         kpis.pack(side="right")
         self.kpi_dia = self._criar_card_kpi(kpis, "HOJE É", "—")
@@ -263,7 +241,6 @@ class App(tk.Tk):
         self.kpi_tarefas = self._criar_card_kpi(kpis, "TAREFAS DO DIA", "0/0")
         self.kpi_pinga = self._criar_card_kpi(kpis, "🥃 PINGÔMETRO", "0 doses")
 
-        # 3. Abas Principais
         self.abas = ttk.Notebook(self)
         self.abas.pack(fill="both", expand=True, padx=14, pady=(0, 10))
         self._montar_aba_escala()
@@ -272,7 +249,7 @@ class App(tk.Tk):
         self._montar_aba_mural()
         self._montar_aba_professor()
 
-    def _criar_card_kpi(self, pai: ttk.Frame, titulo: str, valor_inicial: str) -> tk.Label:
+    def _criar_card_kpi(self, pai, titulo, valor_inicial):
         card = tk.Frame(
             pai,
             bg=COR["bg_card"],
@@ -287,11 +264,10 @@ class App(tk.Tk):
         lbl_valor.pack(anchor="w")
         return lbl_valor
 
-    def _montar_aba_escala(self) -> None:
+    def _montar_aba_escala(self):
         aba = tk.Frame(self.abas, bg=COR["bg_card"], padx=12, pady=10)
         self.abas.add(aba, text=" 📅 Quadro da Semana & Check-in ")
 
-        # Painel Superior: Check-in Rápido das Tarefas de Hoje
         quadro_hoje = tk.Frame(
             aba, bg="#f8fafc", highlightbackground=COR["borda"], highlightthickness=1, padx=12, pady=8
         )
@@ -311,7 +287,6 @@ class App(tk.Tk):
         self.container_checkin = tk.Frame(quadro_hoje, bg="#f8fafc")
         self.container_checkin.pack(fill="x")
 
-        # Quadro Principal: Grade Semanal
         quadro = tk.Frame(aba, bg=COR["borda"], bd=1, relief="solid")
         quadro.pack(fill="both", expand=True)
 
@@ -327,19 +302,19 @@ class App(tk.Tk):
         canvas.pack(side="left", fill="both", expand=True)
         rolagem.pack(side="right", fill="y")
 
-        # Legenda amigável
         legenda = tk.Frame(aba, bg=COR["bg_card"], pady=8)
         legenda.pack(fill="x")
         tk.Label(legenda, text="Cores do Quadro:", font=FONTE_NEGRITO, bg=COR["bg_card"], fg=COR["texto"]).pack(
             side="left", padx=(0, 8)
         )
-        for cor, borda, texto in [
+        itens_legenda = [
             (COR["coluna_hoje"], "#93c5fd", "Dia de Hoje"),
             (COR["concluida"], "#86efac", "✓ Tarefa Concluída"),
             (COR["livre"], "#cbd5e1", "🏖 Dia Livre (Folga)"),
             (COR["alterada"], "#fcd34d", "🔄 Realocada por Imprevisto"),
             (COR["conflito"], "#fca5a5", "⚠ Choque com Aula/Trabalho"),
-        ]:
+        ]
+        for cor, borda, texto in itens_legenda:
             pilula = tk.Frame(legenda, bg=cor, highlightbackground=borda, highlightthickness=1, padx=8, pady=2)
             pilula.pack(side="left", padx=4)
             tk.Label(pilula, text=texto, font=FONTE_PEQUENA, bg=cor, fg=COR["texto"]).pack()
@@ -352,7 +327,7 @@ class App(tk.Tk):
             fg=COR["texto_sec"],
         ).pack(side="right")
 
-    def _montar_aba_moradores(self) -> None:
+    def _montar_aba_moradores(self):
         aba = tk.Frame(self.abas, bg=COR["bg_card"], padx=14, pady=12)
         self.abas.add(aba, text=" 👥 Moradores & Divisão de Esforço ")
 
@@ -393,7 +368,7 @@ class App(tk.Tk):
         quadro_tab = tk.Frame(aba, bg=COR["borda"], bd=1, relief="solid")
         quadro_tab.pack(fill="x", pady=(0, 14))
 
-        self.tabela_integrantes = ttk.Treeview(quadro_tab, columns=list(colunas), show="headings", height=8)
+        self.tabela_integrantes = ttk.Treeview(quadro_tab, columns=list(colunas.keys()), show="headings", height=8)
         for (coluna, largura), titulo in zip(colunas.items(), titulos):
             self.tabela_integrantes.heading(coluna, text=titulo)
             self.tabela_integrantes.column(coluna, width=largura, anchor="w")
@@ -413,12 +388,10 @@ class App(tk.Tk):
             fg=COR["texto"],
         ).pack(anchor="w")
 
-    def _montar_aba_pingometro(self) -> None:
-        """Nova aba dedicada ao controle de multas em doses de pinga."""
+    def _montar_aba_pingometro(self):
         aba = tk.Frame(self.abas, bg=COR["bg_card"], padx=14, pady=12)
         self.abas.add(aba, text=" 🥃 Punições (Pingômetro) ")
 
-        # Cabeçalho explicativo e botões de ação da Caixinha / Pingômetro
         topo_p = tk.Frame(aba, bg="#fffbeb", highlightbackground="#fde68a", highlightthickness=1, padx=14, pady=10)
         topo_p.pack(fill="x", pady=(0, 12))
 
@@ -459,11 +432,9 @@ class App(tk.Tk):
             command=self.exportar_pingometro_csv,
         ).pack(side="left", padx=4)
 
-        # Painel dividido: Ranking à esquerda e Histórico de Multas à direita
         corpo_p = tk.Frame(aba, bg=COR["bg_card"])
         corpo_p.pack(fill="both", expand=True)
 
-        # Esquerda: Ranking de Doses por Morador
         quadro_rank = ttk.LabelFrame(
             corpo_p, text=" 🏆 Ranking do Pingômetro (Selecione um morador para pagar dose) ", padding=8
         )
@@ -471,7 +442,7 @@ class App(tk.Tk):
 
         col_rank = {"morador": 130, "cargo": 95, "pendentes": 130, "pagas": 110, "barometro": 160}
         tit_rank = ["Morador", "Hierarquia", "Doses a Pagar", "Doses Viradas", "Status"]
-        self.tabela_ranking_pinga = ttk.Treeview(quadro_rank, columns=list(col_rank), show="headings", height=10)
+        self.tabela_ranking_pinga = ttk.Treeview(quadro_rank, columns=list(col_rank.keys()), show="headings", height=10)
         for (c, larg), tit in zip(col_rank.items(), tit_rank):
             self.tabela_ranking_pinga.heading(c, text=tit)
             self.tabela_ranking_pinga.column(c, width=larg, anchor="w")
@@ -487,7 +458,6 @@ class App(tk.Tk):
             pady=6,
         ).pack(anchor="w")
 
-        # Direita: Registro detalhado de cada multa aplicada
         quadro_hist = ttk.LabelFrame(
             corpo_p, text=" 📜 Livro Negro da Cachaça (Histórico de Migués e Infrações) ", padding=8
         )
@@ -495,13 +465,13 @@ class App(tk.Tk):
 
         col_hist = {"id": 45, "dia": 80, "morador": 110, "motivo": 230, "status": 110}
         tit_hist = ["#", "Dia", "Infrator", "Motivo da Punição", "Status"]
-        self.tabela_hist_pinga = ttk.Treeview(quadro_hist, columns=list(col_hist), show="headings", height=10)
+        self.tabela_hist_pinga = ttk.Treeview(quadro_hist, columns=list(col_hist.keys()), show="headings", height=10)
         for (c, larg), tit in zip(col_hist.items(), tit_hist):
             self.tabela_hist_pinga.heading(c, text=tit)
             self.tabela_hist_pinga.column(c, width=larg, anchor="w")
         self.tabela_hist_pinga.pack(fill="both", expand=True)
 
-    def _montar_aba_mural(self) -> None:
+    def _montar_aba_mural(self):
         aba = tk.Frame(self.abas, bg=COR["bg_card"], padx=14, pady=12)
         self.abas.add(aba, text=" 💬 Mural de Avisos & Trocas ")
 
@@ -539,8 +509,7 @@ class App(tk.Tk):
         self.log.pack(side="left", fill="both", expand=True)
         rolagem.pack(side="right", fill="y")
 
-    def _montar_aba_professor(self) -> None:
-        """Aba dedicada a mostrar todos os requisitos acadêmicos de IA para avaliação do professor."""
+    def _montar_aba_professor(self):
         aba = tk.Frame(self.abas, bg=COR["bg_card"], padx=14, pady=12)
         self.abas.add(aba, text=" ⚙️ Bastidores (Métricas de IA) ")
 
@@ -565,7 +534,7 @@ class App(tk.Tk):
 
         colunas = {"tarefa": 180, "vezes": 55, "horarios": 230, "custo": 65, "astar": 90, "ucs": 90}
         titulos = ["Tarefa", "Vezes", "Horários (A*)", "Custo", "Nós A*", "Nós UCS"]
-        self.tabela_plano = ttk.Treeview(esq, columns=list(colunas), show="headings", height=7)
+        self.tabela_plano = ttk.Treeview(esq, columns=list(colunas.keys()), show="headings", height=7)
         for (coluna, largura), titulo in zip(colunas.items(), titulos):
             self.tabela_plano.heading(coluna, text=titulo)
             self.tabela_plano.column(coluna, width=largura, anchor="w")
@@ -590,9 +559,9 @@ class App(tk.Tk):
             fg=COR["texto"],
         ).pack(anchor="w")
 
-    # ------------------------------------------------------------ ações da casa e pingômetro
+    # ------------------------------------------------------------ acoes e eventos
 
-    def nova_escala(self, dia: int) -> None:
+    def nova_escala(self, dia):
         self.configure(cursor="watch")
         self.update_idletasks()
         try:
@@ -600,6 +569,7 @@ class App(tk.Tk):
             self.resultado = gerar_escala(self.integrantes, self.tarefas, self.plano.horarios)
         finally:
             self.configure(cursor="")
+
         self.agente = AgenteOnline(self.integrantes, self.tarefas, self.resultado.estado, dia)
         self.concluidas.clear()
 
@@ -613,16 +583,8 @@ class App(tk.Tk):
         )
         self.atualizar()
 
-    def _aplicar_multa_pinga(self, integrante_idx: int, dia: int, motivo: str) -> None:
-        """Registra +1 dose de pinga para o morador infrator."""
-        nova = MultaPinga(
-            id_multa=self._seq_multa,
-            integrante=integrante_idx,
-            dia=dia,
-            motivo=motivo,
-            doses=1,
-            paga=False,
-        )
+    def _aplicar_multa_pinga(self, integrante_idx, dia, motivo):
+        nova = MultaPinga(self._seq_multa, integrante_idx, dia, motivo, 1, False)
         self._seq_multa += 1
         self.multas.append(nova)
         nome_p = self.agente.integrantes[integrante_idx].nome
@@ -631,8 +593,7 @@ class App(tk.Tk):
             "erro",
         )
 
-    def pagar_dose_selecionada(self) -> None:
-        """Abate 1 dose pendente do morador selecionado no Ranking ou no Histórico."""
+    def pagar_dose_selecionada(self):
         selecao_hist = self.tabela_hist_pinga.selection()
         if selecao_hist:
             valores = self.tabela_hist_pinga.item(selecao_hist[0], "values")
@@ -641,7 +602,10 @@ class App(tk.Tk):
                 if m.id_multa == id_alvo and not m.paga:
                     m.paga = True
                     nome_p = self.agente.integrantes[m.integrante].nome
-                    self._log(f"🥃🎉 [{DIAS[self.agente.dia_atual]}] {nome_p} virou 1 dose de pinga e quitou: \"{m.motivo}\"!", "mudanca")
+                    self._log(
+                        f"🥃🎉 [{DIAS[self.agente.dia_atual]}] {nome_p} virou 1 dose de pinga e quitou: \"{m.motivo}\"!",
+                        "mudanca",
+                    )
                     self.atualizar()
                     return
 
@@ -657,17 +621,19 @@ class App(tk.Tk):
         for m in self.multas:
             if self.agente.integrantes[m.integrante].nome == nome_sel and not m.paga:
                 m.paga = True
-                self._log(f"🥃🎉 [{DIAS[self.agente.dia_atual]}] {nome_sel} virou 1 dose de pinga na frente da galera! (Quitou: {m.motivo})", "mudanca")
+                self._log(
+                    f"🥃🎉 [{DIAS[self.agente.dia_atual]}] {nome_sel} virou 1 dose de pinga na frente da galera! (Quitou: {m.motivo})",
+                    "mudanca",
+                )
                 self.atualizar()
                 return
 
         messagebox.showinfo("Tudo Quitado!", f"{nome_sel} não está devendo nenhuma dose de pinga no momento!")
 
-    def adicionar_multa_avulsa(self) -> None:
-        """Abre janela rápida para multar alguém por motivos gerais da casa."""
+    def adicionar_multa_avulsa(self):
         DialogoMultaAvulsa(self)
 
-    def exportar_pingometro_csv(self) -> None:
+    def exportar_pingometro_csv(self):
         if not self.multas:
             messagebox.showinfo("Exportar Pingômetro", "Ainda não há nenhuma multa registrada nesta semana!")
             return
@@ -684,18 +650,11 @@ class App(tk.Tk):
             esc.writerow(["ID", "Morador", "Hierarquia", "Dia", "Motivo", "Doses", "Status"])
             for m in self.multas:
                 p = self.agente.integrantes[m.integrante]
-                esc.writerow([
-                    m.id_multa,
-                    p.nome,
-                    p.cargo,
-                    DIAS[m.dia],
-                    m.motivo,
-                    m.doses,
-                    "Paga (Virou)" if m.paga else "Pendente",
-                ])
+                status_txt = "Paga (Virou)" if m.paga else "Pendente"
+                esc.writerow([m.id_multa, p.nome, p.cargo, DIAS[m.dia], m.motivo, m.doses, status_txt])
         messagebox.showinfo("Exportado com Sucesso", f"Relatório do Pingômetro salvo em:\n{caminho}")
 
-    def marcar_feita(self, k: int) -> None:
+    def marcar_feita(self, k):
         if k in self.agente.nao_realizadas:
             return
         t, i, d, _ = self.agente.estado[k]
@@ -709,31 +668,35 @@ class App(tk.Tk):
             self._log(f"✅ [{DIAS[d]}] Boa! {nome_p} concluiu a tarefa \"{nome_t}\".", "mudanca")
         self.atualizar()
 
-    def reportar_migue_direto(self, k: int) -> None:
+    def reportar_migue_direto(self, k):
         if k in self.agente.nao_realizadas:
             return
         t, i, d, _ = self.agente.estado[k]
         nome_t = self.agente.tarefas[t].nome
         nome_p = self.agente.integrantes[i].nome
-        if not messagebox.askyesno(
+        confirmou = messagebox.askyesno(
             "Confirmar Migué (+1 Dose de Pinga 🥃)",
             f"{nome_p} realmente não fez \"{nome_t}\" hoje?\n\n"
             f"• O sistema vai realocar essa tarefa automaticamente (Busca Online).\n"
             f"• {nome_p} vai receber +1 DOSE DE PINGA de multa no Pingômetro!",
-        ):
+        )
+        if not confirmou:
             return
-        self.concluidas.discard(k)
+        if k in self.concluidas:
+            self.concluidas.remove(k)
         imp = Imprevisto("nao_realizada", d, ocorrencia=k)
         self.registrar_imprevisto(imp)
 
-    def regerar(self) -> None:
-        if self.agente.historico and not messagebox.askyesno(
-            "Sortear nova escala", "As trocas desta semana serão zeradas. Quer gerar outra escala do zero?"
-        ):
-            return
+    def regerar(self):
+        if self.agente.historico:
+            confirmou = messagebox.askyesno(
+                "Sortear nova escala", "As trocas desta semana serão zeradas. Quer gerar outra escala do zero?"
+            )
+            if not confirmou:
+                return
         self.nova_escala(self.agente.dia_atual)
 
-    def avancar_dia(self) -> None:
+    def avancar_dia(self):
         if self.agente.dia_atual == 6:
             self._log("─── Domingou! Virando a folha para uma nova semana ───", "destaque")
             self.nova_escala(0)
@@ -745,18 +708,21 @@ class App(tk.Tk):
         self._log(f"☀️ [{DIAS[self.agente.dia_atual]}] Bom dia! Começando as tarefas de {DIAS[self.agente.dia_atual]}.")
         self.atualizar()
 
-    def _verificar_data(self) -> None:
+    def _verificar_data(self):
         hoje = dt.date.today()
-        for _ in range(min((hoje - self.data_real).days, 7)):
+        dias_passados = (hoje - self.data_real).days
+        if dias_passados > 7:
+            dias_passados = 7
+        for _ in range(dias_passados):
             self.avancar_dia()
         self.data_real = hoje
-        self.after(60_000, self._verificar_data)
+        self.after(60000, self._verificar_data)
 
-    def usar_simulados(self) -> None:
+    def usar_simulados(self):
         self.multas.clear()
         self._usar_integrantes(dados.integrantes_simulados(), [], "Dados de Exemplo")
 
-    def importar_csv(self) -> None:
+    def importar_csv(self):
         caminho = filedialog.askopenfilename(
             title="Respostas do Google Forms (CSV)", filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")]
         )
@@ -768,9 +734,10 @@ class App(tk.Tk):
             messagebox.showerror("Erro ao ler o CSV", str(erro))
             return
         self.multas.clear()
-        self._usar_integrantes(integrantes, avisos, f"Forms ({caminho.split('/')[-1]})")
+        nome_arq = caminho.split("/")[-1]
+        self._usar_integrantes(integrantes, avisos, f"Forms ({nome_arq})")
 
-    def importar_sheets(self) -> None:
+    def importar_sheets(self):
         url = simpledialog.askstring(
             "Conectar Planilha Google",
             "Cole o link da planilha de respostas do Forms da República\n"
@@ -787,8 +754,9 @@ class App(tk.Tk):
         self.multas.clear()
         self._usar_integrantes(integrantes, avisos, "Planilha Online da República")
 
-    def _usar_integrantes(self, integrantes: list[Integrante], avisos: list[str], fonte: str) -> None:
-        self.integrantes, self.fonte = integrantes, fonte
+    def _usar_integrantes(self, integrantes, avisos, fonte):
+        self.integrantes = integrantes
+        self.fonte = fonte
         self._log(f"📥 Horários atualizados via {fonte} ({len(integrantes)} moradores).", "destaque")
         for aviso in avisos:
             self._log(f"  ⚠ Atenção na regra da casa: {aviso}", "imprevisto")
@@ -796,11 +764,11 @@ class App(tk.Tk):
             messagebox.showwarning("Regra de Hierarquia", "\n".join(avisos))
         self.nova_escala(self.agente.dia_atual)
 
-    def registrar_imprevisto(self, imp: Imprevisto) -> None:
+    def registrar_imprevisto(self, imp):
         ag = self.agente
         descricao = imp.descricao(ag)
 
-        # Se for tarefa não realizada, captura o responsável antes do replanejamento e aplica a dose de pinga!
+        # Se a tarefa nao foi feita, anota 1 dose de pinga pro responsavel antes de replanejar
         if imp.tipo == "nao_realizada" and imp.ocorrencia is not None:
             t_orig, i_orig, d_orig, _ = ag.estado[imp.ocorrencia]
             nome_tarefa = ag.tarefas[t_orig].nome
@@ -812,17 +780,22 @@ class App(tk.Tk):
             self._log("   ✓ Tudo certo! Ninguém precisou trocar de tarefa.")
         for m in mudancas:
             self._log("   🔄 " + self._descrever_mudanca(m), "mudanca")
-        sem_responsavel = sum(1 for a in ag.estado if a is None)
-        if sem_responsavel:
+
+        sem_responsavel = 0
+        for a in ag.estado:
+            if a is None:
+                sem_responsavel += 1
+        if sem_responsavel > 0:
             self._log(f"   🚨 {sem_responsavel} tarefa(s) ficaram sem ninguém livre!", "erro")
         self.atualizar()
 
-    def imprevisto_aleatorio(self) -> None:
-        self.registrar_imprevisto(self.agente.imprevisto_aleatorio(self.rng))
+    def imprevisto_aleatorio(self):
+        imp = self.agente.imprevisto_aleatorio(self.rng)
+        self.registrar_imprevisto(imp)
 
-    # ------------------------------------------------------------ desenho e atualização
+    # ------------------------------------------------------------ atualizacao da tela
 
-    def atualizar(self) -> None:
+    def atualizar(self):
         self._desenhar_checkin_hoje()
         self._desenhar_escala()
         self._atualizar_integrantes()
@@ -831,34 +804,49 @@ class App(tk.Tk):
 
         ag = self.agente
         comp = ProblemaEscala(ag.integrantes, ag.tarefas).componentes(ag.estado)
-        custo = sum(PESOS[k] * v for k, v in comp.items())
+
+        custo = 0
+        for k, v in comp.items():
+            custo += PESOS[k] * v
+
         rigidas = int(comp["indisponivel"] + comp["dia_repetido"])
 
-        tarefas_hoje = [k for k, a in enumerate(ag.estado) if a is not None and a[2] == ag.dia_atual]
-        feitas_hoje = [k for k in tarefas_hoje if k in self.concluidas]
-        doses_pendentes = sum(m.doses for m in self.multas if not m.paga)
+        tarefas_hoje = []
+        feitas_hoje = []
+        for k, a in enumerate(ag.estado):
+            if a is not None and a[2] == ag.dia_atual:
+                tarefas_hoje.append(k)
+                if k in self.concluidas:
+                    feitas_hoje.append(k)
+
+        doses_pendentes = 0
+        for m in self.multas:
+            if not m.paga:
+                doses_pendentes += m.doses
 
         if rigidas > 0:
-            clima_txt, clima_cor = "⚠ Sobrecarga", COR["perigo"]
+            clima_txt = "⚠ Sobrecarga"
+            clima_cor = COR["perigo"]
         elif custo <= 35:
-            clima_txt, clima_cor = "✨ Paz na Casa", COR["sucesso"]
+            clima_txt = "✨ Paz na Casa"
+            clima_cor = COR["sucesso"]
         elif custo <= 90:
-            clima_txt, clima_cor = "👍 Bem Dividido", COR["primaria"]
+            clima_txt = "👍 Bem Dividido"
+            clima_cor = COR["primaria"]
         else:
-            clima_txt, clima_cor = "🔥 Semana Puxada", COR["aviso"]
+            clima_txt = "🔥 Semana Puxada"
+            clima_cor = COR["aviso"]
 
         self.kpi_dia.configure(text=DIAS[ag.dia_atual], fg=COR["primaria"])
         self.kpi_clima.configure(text=clima_txt, fg=clima_cor)
-        self.kpi_tarefas.configure(
-            text=f"{len(feitas_hoje)}/{len(tarefas_hoje)} feitas",
-            fg=COR["sucesso"] if len(feitas_hoje) == len(tarefas_hoje) and tarefas_hoje else COR["texto"],
-        )
-        self.kpi_pinga.configure(
-            text=f"{doses_pendentes} dose(s)",
-            fg=COR["pinga"] if doses_pendentes > 0 else COR["sucesso"],
-        )
 
-    def _desenhar_checkin_hoje(self) -> None:
+        cor_tar = COR["sucesso"] if (len(feitas_hoje) == len(tarefas_hoje) and len(tarefas_hoje) > 0) else COR["texto"]
+        self.kpi_tarefas.configure(text=f"{len(feitas_hoje)}/{len(tarefas_hoje)} feitas", fg=cor_tar)
+
+        cor_pin = COR["pinga"] if doses_pendentes > 0 else COR["sucesso"]
+        self.kpi_pinga.configure(text=f"{doses_pendentes} dose(s)", fg=cor_pin)
+
+    def _desenhar_checkin_hoje(self):
         for w in self.container_checkin.winfo_children():
             w.destroy()
 
@@ -868,11 +856,10 @@ class App(tk.Tk):
             text=f"📌 Tarefas de Hoje ({DIAS[hoje]}) — Confirme o que foi feito ou marque 'Não fez' (+1 dose de pinga 🥃):"
         )
 
-        do_dia = [
-            (a[3], k, a[0], a[1])
-            for k, a in enumerate(ag.estado)
-            if a is not None and a[2] == hoje
-        ]
+        do_dia = []
+        for k, a in enumerate(ag.estado):
+            if a is not None and a[2] == hoje:
+                do_dia.append((a[3], k, a[0], a[1]))
         do_dia.sort()
 
         if not do_dia:
@@ -891,8 +878,15 @@ class App(tk.Tk):
             feita = k in self.concluidas
             nao_feita = k in ag.nao_realizadas
 
-            bg_card = COR["concluida"] if feita else COR["conflito"] if nao_feita else "white"
-            borda_card = "#86efac" if feita else "#fca5a5" if nao_feita else COR["borda"]
+            if feita:
+                bg_card = COR["concluida"]
+                borda_card = "#86efac"
+            elif nao_feita:
+                bg_card = COR["conflito"]
+                borda_card = "#fca5a5"
+            else:
+                bg_card = "white"
+                borda_card = COR["borda"]
 
             card = tk.Frame(
                 self.container_checkin,
@@ -968,7 +962,7 @@ class App(tk.Tk):
                     )
                     btn_migue.pack(side="left")
 
-    def _desenhar_escala(self) -> None:
+    def _desenhar_escala(self):
         for w in self.grade.winfo_children():
             w.destroy()
         ag = self.agente
@@ -1002,15 +996,22 @@ class App(tk.Tk):
             ).grid(row=0, column=d + 1, sticky="nsew", padx=(0, 1), pady=(0, 1))
             self.grade.columnconfigure(d + 1, weight=1, uniform="dia")
 
-        por_celula: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
+        por_celula = {}
         for k, a in enumerate(ag.estado):
             if a is not None:
                 t, i, d, s = a
-                por_celula.setdefault((i, d), []).append((s, k, t))
+                chave = (i, d)
+                if chave not in por_celula:
+                    por_celula[chave] = []
+                por_celula[chave].append((s, k, t))
 
         for i, pessoa in enumerate(ag.integrantes):
             bg_linha = COR["celula"] if i % 2 == 0 else COR["celula_alt"]
-            doses_p = sum(m.doses for m in self.multas if m.integrante == i and not m.paga)
+
+            doses_p = 0
+            for m in self.multas:
+                if m.integrante == i and not m.paga:
+                    doses_p += m.doses
 
             quadro_pessoa = tk.Frame(self.grade, bg=bg_linha, padx=12, pady=8)
             quadro_pessoa.grid(row=i + 1, column=0, sticky="nsew", padx=(0, 1), pady=(0, 1))
@@ -1029,23 +1030,31 @@ class App(tk.Tk):
 
             for d in range(7):
                 tarefas_celula = sorted(por_celula.get((i, d), []))
-                conflito = any(not pessoa.disponivel(d, s) for s, _, _ in tarefas_celula)
-                alterada = any(k in ag.alteradas for _, k, _ in tarefas_celula)
-                todas_feitas = bool(tarefas_celula) and all(k in self.concluidas for _, k, _ in tarefas_celula)
 
-                bg = (
-                    COR["conflito"]
-                    if conflito
-                    else COR["concluida"]
-                    if todas_feitas and d == hoje
-                    else COR["alterada"]
-                    if alterada
-                    else COR["livre"]
-                    if d in pessoa.dias_livres
-                    else COR["coluna_hoje"]
-                    if d == hoje
-                    else bg_linha
-                )
+                conflito = False
+                alterada = False
+                todas_feitas = len(tarefas_celula) > 0
+                for s, k, _ in tarefas_celula:
+                    if not pessoa.disponivel(d, s):
+                        conflito = True
+                    if k in ag.alteradas:
+                        alterada = True
+                    if k not in self.concluidas:
+                        todas_feitas = False
+
+                if conflito:
+                    bg = COR["conflito"]
+                elif todas_feitas and d == hoje:
+                    bg = COR["concluida"]
+                elif alterada:
+                    bg = COR["alterada"]
+                elif d in pessoa.dias_livres:
+                    bg = COR["livre"]
+                elif d == hoje:
+                    bg = COR["coluna_hoje"]
+                else:
+                    bg = bg_linha
+
                 fg_principal = COR["passado"] if d < hoje else COR["texto"]
 
                 cel = tk.Frame(self.grade, bg=bg, padx=8, pady=6, cursor="hand2")
@@ -1068,15 +1077,23 @@ class App(tk.Tk):
                     feita = k in self.concluidas
                     nao_feita = k in ag.nao_realizadas
 
-                    marca = "🥃✗ " if nao_feita else "✓ " if feita else "★ " if tarefa.extra else ""
-                    cor_item = (
-                        COR["perigo"]
-                        if nao_feita
-                        else COR["concluida_texto"]
-                        if feita and d >= hoje
-                        else fg_principal
-                    )
-                    fonte_item = FONTE_NEGRITO if (tarefa.extra or k in ag.alteradas or d == hoje) else FONTE
+                    if nao_feita:
+                        marca = "🥃✗ "
+                        cor_item = COR["perigo"]
+                    elif feita:
+                        marca = "✓ "
+                        cor_item = COR["concluida_texto"] if d >= hoje else fg_principal
+                    elif tarefa.extra:
+                        marca = "★ "
+                        cor_item = fg_principal
+                    else:
+                        marca = ""
+                        cor_item = fg_principal
+
+                    if tarefa.extra or k in ag.alteradas or d == hoje:
+                        fonte_item = FONTE_NEGRITO
+                    else:
+                        fonte_item = FONTE
 
                     lbl_t = tk.Label(
                         cel,
@@ -1094,7 +1111,10 @@ class App(tk.Tk):
                     else:
                         lbl_t.bind("<Button-1>", acao_clique)
 
-                ocupados = [TURNOS[s][0] for s in range(3) if (d, s) in pessoa.ocupados]
+                ocupados = []
+                for s in range(3):
+                    if (d, s) in pessoa.ocupados:
+                        ocupados.append(TURNOS[s][0])
                 if ocupados and d not in pessoa.dias_livres:
                     lbl_oc = tk.Label(
                         cel,
@@ -1107,45 +1127,72 @@ class App(tk.Tk):
                     lbl_oc.pack(anchor="w", pady=(3, 0))
                     lbl_oc.bind("<Button-1>", acao_clique)
 
-    def _atualizar_integrantes(self) -> None:
+    def _atualizar_integrantes(self):
         ag = self.agente
         self.info_fonte.set(f"Horários ativos: {self.fonte} ({len(ag.integrantes)} moradores na casa)")
         self.tabela_integrantes.delete(*self.tabela_integrantes.get_children())
 
         esforcos = []
-        for idx, _ in enumerate(ag.integrantes):
-            pts = sum(ag.tarefas[a[0]].esforco for a in ag.estado if a is not None and a[1] == idx)
+        for idx in range(len(ag.integrantes)):
+            pts = 0
+            for a in ag.estado:
+                if a is not None and a[1] == idx:
+                    pts += ag.tarefas[a[0]].esforco
             esforcos.append(pts)
+
         media_esforco = sum(esforcos) / len(esforcos) if esforcos else 1.0
         max_esforco = max(esforcos + [10])
 
-        for i, p in sorted(enumerate(ag.integrantes), key=lambda par: -par[1].hierarquia):
-            minhas_idx = [k for k, a in enumerate(ag.estado) if a is not None and a[1] == i]
-            minhas = [ag.estado[k] for k in minhas_idx]
-            feitas_p = sum(1 for k in minhas_idx if k in self.concluidas)
-            doses_pendentes = sum(m.doses for m in self.multas if m.integrante == i and not m.paga)
-            pts = esforcos[i]
+        pares = list(enumerate(ag.integrantes))
+        pares.sort(key=lambda par: -par[1].hierarquia)
 
+        for i, p in pares:
+            minhas_idx = []
+            minhas = []
+            for k, a in enumerate(ag.estado):
+                if a is not None and a[1] == i:
+                    minhas_idx.append(k)
+                    minhas.append(a)
+
+            feitas_p = 0
+            for k in minhas_idx:
+                if k in self.concluidas:
+                    feitas_p += 1
+
+            doses_pendentes = 0
+            for m in self.multas:
+                if m.integrante == i and not m.paga:
+                    doses_pendentes += m.doses
+
+            pts = esforcos[i]
             blocos = round((pts / max_esforco) * 10)
             barra = "█" * blocos + "░" * (10 - blocos)
 
-            choques_aula = sum(1 for a in minhas if not p.disponivel(a[2], a[3]))
-            fora_pref = sum(1 for a in minhas if p.dias_preferidos and a[2] not in p.dias_preferidos)
+            choques_aula = 0
+            fora_pref = 0
+            for a in minhas:
+                if not p.disponivel(a[2], a[3]):
+                    choques_aula += 1
+                if p.dias_preferidos and a[2] not in p.dias_preferidos:
+                    fora_pref += 1
 
             avisos_pessoa = []
-            if choques_aula:
+            if choques_aula > 0:
                 avisos_pessoa.append(f"⚠ {choques_aula}x em horário ocupado")
-            if doses_pendentes:
+            if doses_pendentes > 0:
                 avisos_pessoa.append(f"🥃 Deve {doses_pendentes} dose(s)")
             if pts > media_esforco + 2.5:
                 avisos_pessoa.append("🔥 Carga acima da média")
             elif pts < media_esforco - 2.5:
                 avisos_pessoa.append("🍃 Carga leve")
-            if fora_pref:
+            if fora_pref > 0:
                 avisos_pessoa.append(f"{fora_pref}x fora do dia preferido")
 
-            situacao_txt = "  •  ".join(avisos_pessoa) if avisos_pessoa else "✅Sem conflitos"
+            situacao_txt = "  •  ".join(avisos_pessoa) if avisos_pessoa else "✅ Sem conflitos"
             txt_pinga = f"🥃 {doses_pendentes} dose(s)" if doses_pendentes > 0 else "Zero"
+
+            dias_livres_txt = ", ".join(DIAS[d] for d in sorted(p.dias_livres)) or "—"
+            dias_pref_txt = ", ".join(DIAS[d] for d in sorted(p.dias_preferidos)) or "Qualquer dia"
 
             self.tabela_integrantes.insert(
                 "",
@@ -1153,8 +1200,8 @@ class App(tk.Tk):
                 values=(
                     p.nome,
                     p.cargo,
-                    ", ".join(DIAS[d] for d in sorted(p.dias_livres)) or "—",
-                    ", ".join(DIAS[d] for d in sorted(p.dias_preferidos)) or "Qualquer dia",
+                    dias_livres_txt,
+                    dias_pref_txt,
                     f"{feitas_p}/{len(minhas)} feitas",
                     f"{barra}  {pts} pts",
                     txt_pinga,
@@ -1177,17 +1224,21 @@ class App(tk.Tk):
 
         self.info_justica_humana.set("\n".join(frases))
 
-    def _atualizar_pingometro(self) -> None:
-        """Atualiza o Ranking do Pingômetro e o Livro Negro de Multas."""
+    def _atualizar_pingometro(self):
         ag = self.agente
         self.tabela_ranking_pinga.delete(*self.tabela_ranking_pinga.get_children())
         self.tabela_hist_pinga.delete(*self.tabela_hist_pinga.get_children())
 
-        # Monta dados do ranking ordenando por quem deve mais doses
         dados_rank = []
         for i, p in enumerate(ag.integrantes):
-            pend = sum(m.doses for m in self.multas if m.integrante == i and not m.paga)
-            pagas = sum(m.doses for m in self.multas if m.integrante == i and m.paga)
+            pend = 0
+            pagas = 0
+            for m in self.multas:
+                if m.integrante == i:
+                    if m.paga:
+                        pagas += m.doses
+                    else:
+                        pend += m.doses
             dados_rank.append((pend, pagas, p))
 
         dados_rank.sort(key=lambda x: (-x[0], -x[1], -x[2].hierarquia))
@@ -1203,7 +1254,7 @@ class App(tk.Tk):
             elif pend <= 3:
                 status_etilico = f"{copos} Ruim"
             else:
-                status_etilico = f"{copos} Pessimo!!"
+                status_etilico = f"{copos} Péssimo!!"
 
             self.tabela_ranking_pinga.insert(
                 "",
@@ -1226,13 +1277,19 @@ class App(tk.Tk):
                 values=(m.id_multa, DIAS[m.dia], p.nome, m.motivo, status_m),
             )
 
-        tot_pend = sum(m.doses for m in self.multas if not m.paga)
-        tot_pagas = sum(m.doses for m in self.multas if m.paga)
+        tot_pend = 0
+        tot_pagas = 0
+        for m in self.multas:
+            if m.paga:
+                tot_pagas += m.doses
+            else:
+                tot_pend += m.doses
+
         self.lbl_resumo_pinga.set(
             f"Total na Semana:   {tot_pend} dose(s) na fila pra virar   •   {tot_pagas} dose(s) já pagas pela galera"
         )
 
-    def _atualizar_aba_professor(self) -> None:
+    def _atualizar_aba_professor(self):
         ag = self.agente
         for w in self.grade_plano.winfo_children():
             w.destroy()
@@ -1262,28 +1319,33 @@ class App(tk.Tk):
             )
             self.grade_plano.columnconfigure(d + 1, weight=1, uniform="dia")
 
-        por_horario: dict[tuple[int, int], list[str]] = {}
+        por_horario = {}
         for k, a in enumerate(ag.estado):
             if a is not None:
                 tarefa = ag.tarefas[a[0]]
-                marca = "✗ " if k in ag.nao_realizadas else "★ " if tarefa.extra else "• "
-                por_horario.setdefault((a[2], a[3]), []).append(marca + tarefa.nome)
+                if k in ag.nao_realizadas:
+                    marca = "✗ "
+                elif tarefa.extra:
+                    marca = "★ "
+                else:
+                    marca = "• "
+                chave = (a[2], a[3])
+                if chave not in por_horario:
+                    por_horario[chave] = []
+                por_horario[chave].append(marca + tarefa.nome)
 
         for s in range(3):
             celula(s + 1, 0, TURNOS[s], COR["celula"], COR["texto"])
             for d in range(7):
-                livres = sum(p.disponivel(d, s) for p in ag.integrantes)
+                livres = 0
+                for p in ag.integrantes:
+                    if p.disponivel(d, s):
+                        livres += 1
                 lista_t = sorted(por_horario.get((d, s), []))
                 texto = "\n".join(lista_t) + f"\n({livres} livres)"
                 bg = COR["coluna_hoje"] if d == ag.dia_atual else COR["celula"]
-                celula(
-                    s + 1,
-                    d + 1,
-                    texto.strip(),
-                    bg,
-                    COR["passado"] if d < ag.dia_atual else COR["texto"],
-                    FONTE_PEQUENA,
-                )
+                fg_c = COR["passado"] if d < ag.dia_atual else COR["texto"]
+                celula(s + 1, d + 1, texto.strip(), bg, fg_c, FONTE_PEQUENA)
 
         self.tabela_plano.delete(*self.tabela_plano.get_children())
         for p in self.plano.por_tarefa:
@@ -1322,19 +1384,22 @@ class App(tk.Tk):
             linhas.append(f"{desc[:40]:<42}{comp_atual[chave]:>10.1f}{PESOS[chave]:>10}")
         self.info_local.set("\n".join(linhas))
 
-    def _descrever_mudanca(self, m: Mudanca) -> str:
+    def _descrever_mudanca(self, m):
         ag = self.agente
 
         def formatar(a):
-            return "ninguém" if a is None else f"{ag.integrantes[a[1]].nome} na {DIAS[a[2]]} ({TURNOS[a[3]].lower()})"
+            if a is None:
+                return "ninguém"
+            return f"{ag.integrantes[a[1]].nome} na {DIAS[a[2]]} ({TURNOS[a[3]].lower()})"
 
-        tarefa = ag.tarefas[(m.depois or m.antes)[0]]
+        aloc_base = m.depois if m.depois is not None else m.antes
+        tarefa = ag.tarefas[aloc_base[0]]
         nome = ("★ " if tarefa.extra else "") + tarefa.nome
         if m.antes is None:
             return f"Nova tarefa \"{nome}\" ficou para {formatar(m.depois)}"
         return f"\"{nome}\" passou de {formatar(m.antes)} para {formatar(m.depois)}"
 
-    def _log(self, texto: str, tag: str | None = None) -> None:
+    def _log(self, texto, tag=None):
         self.log.configure(state="normal")
         if tag:
             self.log.insert("end", texto + "\n", tag)
@@ -1345,8 +1410,6 @@ class App(tk.Tk):
 
 
 class DialogoMultaAvulsa(tk.Toplevel):
-    """Janela rápida para aplicar +1 dose de pinga por motivos avulsos na república."""
-
     MOTIVOS_SUGERIDOS = [
         "Deixou louça suja na pia",
         "Esqueceu a chave / Trancou alguém pra fora",
@@ -1355,7 +1418,7 @@ class DialogoMultaAvulsa(tk.Toplevel):
         "Sujou o fogão depois que limparam",
     ]
 
-    def __init__(self, app: App):
+    def __init__(self, app):
         super().__init__(app)
         self.app = app
         self.title("Aplicar Multa Avulsa (+1 Dose 🥃)")
@@ -1408,7 +1471,7 @@ class DialogoMultaAvulsa(tk.Toplevel):
         )
         self.grab_set()
 
-    def _confirmar(self) -> None:
+    def _confirmar(self):
         nomes = [p.nome for p in self.app.agente.integrantes]
         motivo = self.var_motivo.get().strip()
         if not motivo:
@@ -1427,7 +1490,7 @@ class DialogoImprevisto(tk.Toplevel):
         "nao_realizada": ("dia", "ocorrencia"),
     }
 
-    def __init__(self, app: App, dia_inicial: int | None = None, integrante_inicial: int | None = None):
+    def __init__(self, app, dia_inicial=None, integrante_inicial=None):
         super().__init__(app)
         self.app = app
         self.title("Lançar Imprevisto na Casa")
@@ -1446,11 +1509,12 @@ class DialogoImprevisto(tk.Toplevel):
             fg=COR["primaria"],
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
-        self.var = {
-            chave: tk.StringVar()
-            for chave in ("tipo", "dia", "integrante", "turno", "ocorrencia", "nome", "esforco")
-        }
-        self.linhas: dict[str, tuple[tk.Label, tk.Widget]] = {}
+        chaves = ("tipo", "dia", "integrante", "turno", "ocorrencia", "nome", "esforco")
+        self.var = {}
+        for chave in chaves:
+            self.var[chave] = tk.StringVar()
+
+        self.linhas = {}
 
         def linha(chave, rotulo, widget):
             r = len(self.linhas) + 1
@@ -1465,7 +1529,7 @@ class DialogoImprevisto(tk.Toplevel):
                 corpo, textvariable=self.var[chave], values=list(valores), state="readonly", width=46
             )
 
-        linha("tipo", "Situação:", combo("tipo", TIPOS_HUMANOS.values()))
+        self.cb_tipo = linha("tipo", "Situação:", combo("tipo", TIPOS_HUMANOS.values()))
         self.cb_dia = linha("dia", "Dia da Semana:", combo("dia"))
         linha("integrante", "Qual Morador?", combo("integrante", [p.nome for p in app.agente.integrantes]))
         self.cb_turno = linha("turno", "Qual Turno?", combo("turno"))
@@ -1484,22 +1548,29 @@ class DialogoImprevisto(tk.Toplevel):
             side="right", padx=8
         )
 
-        self.var["tipo"].trace_add("write", lambda *_: self._ao_mudar_tipo())
-        self.var["dia"].trace_add("write", lambda *_: self._ao_mudar_dia())
+        self.cb_tipo.bind("<<ComboboxSelected>>", lambda _e: self._ao_mudar_tipo())
+        self.cb_dia.bind("<<ComboboxSelected>>", lambda _e: self._ao_mudar_dia())
+
         self.var["esforco"].set("2")
         self.var["tipo"].set(TIPOS_HUMANOS["indisponivel"])
+        self._ao_mudar_tipo()
 
         if integrante_inicial is not None:
             self.var["integrante"].set(app.agente.integrantes[integrante_inicial].nome)
         if dia_inicial is not None and dia_inicial >= app.agente.dia_atual:
             self.var["dia"].set(DIAS[dia_inicial])
+            self._ao_mudar_dia()
 
         self.grab_set()
 
-    def _tipo(self) -> str:
-        return next(chave for chave, nome in TIPOS_HUMANOS.items() if nome == self.var["tipo"].get())
+    def _tipo(self):
+        texto_escolhido = self.var["tipo"].get()
+        for chave, nome in TIPOS_HUMANOS.items():
+            if nome == texto_escolhido:
+                return chave
+        return "indisponivel"
 
-    def _ao_mudar_tipo(self) -> None:
+    def _ao_mudar_tipo(self):
         tipo = self._tipo()
         for chave, (texto, widget) in self.linhas.items():
             if chave == "tipo" or chave in self.CAMPOS[tipo]:
@@ -1508,33 +1579,45 @@ class DialogoImprevisto(tk.Toplevel):
             else:
                 texto.grid_remove()
                 widget.grid_remove()
+
         hoje = self.app.agente.dia_atual
-        self.dias = list(range(0, hoje + 1)) if tipo == "nao_realizada" else list(range(hoje, 7))
+        if tipo == "nao_realizada":
+            self.dias = list(range(0, hoje + 1))
+        else:
+            self.dias = list(range(hoje, 7))
+
         self.cb_dia["values"] = [DIAS[d] for d in self.dias]
-        self.turnos = (["Dia inteiro"] if tipo == "indisponivel" else ["Qualquer turno"]) + TURNOS
+        prefixo_turno = ["Dia inteiro"] if tipo == "indisponivel" else ["Qualquer turno"]
+        self.turnos = prefixo_turno + TURNOS
         self.cb_turno["values"] = self.turnos
         self.var["turno"].set(self.turnos[0])
         self.var["dia"].set(DIAS[hoje])
+        self._ao_mudar_dia()
 
-    def _ao_mudar_dia(self) -> None:
+    def _ao_mudar_dia(self):
         ag = self.app.agente
         if not self.var["dia"].get():
             return
         dia = DIAS.index(self.var["dia"].get())
-        self.ocorrencias = [
-            k for k, a in enumerate(ag.estado) if a is not None and a[2] == dia and k not in ag.nao_realizadas
-        ]
-        self.cb_ocorrencia["values"] = [
-            f"{ag.tarefas[ag.estado[k][0]].nome} — {ag.integrantes[ag.estado[k][1]].nome} "
-            f"({TURNOS[ag.estado[k][3]].lower()})"
-            for k in self.ocorrencias
-        ]
-        self.var["ocorrencia"].set(self.cb_ocorrencia["values"][0] if self.ocorrencias else "")
+        self.ocorrencias = []
+        opcoes_texto = []
+        for k, a in enumerate(ag.estado):
+            if a is not None and a[2] == dia and k not in ag.nao_realizadas:
+                self.ocorrencias.append(k)
+                nome_t = ag.tarefas[a[0]].nome
+                nome_p = ag.integrantes[a[1]].nome
+                turno_txt = TURNOS[a[3]].lower()
+                opcoes_texto.append(f"{nome_t} — {nome_p} ({turno_txt})")
 
-    def _confirmar(self) -> None:
+        self.cb_ocorrencia["values"] = opcoes_texto
+        self.var["ocorrencia"].set(opcoes_texto[0] if opcoes_texto else "")
+
+    def _confirmar(self):
         tipo = self._tipo()
         dia = DIAS.index(self.var["dia"].get())
-        turno = TURNOS.index(self.var["turno"].get()) if self.var["turno"].get() in TURNOS else None
+        turno_str = self.var["turno"].get()
+        turno = TURNOS.index(turno_str) if turno_str in TURNOS else None
+
         if tipo == "indisponivel":
             nomes = [p.nome for p in self.app.agente.integrantes]
             if self.var["integrante"].get() not in nomes:
@@ -1547,17 +1630,15 @@ class DialogoImprevisto(tk.Toplevel):
                 messagebox.showerror("Imprevisto", "Digite qual é a tarefa extra.", parent=self)
                 return
             try:
-                esforco = min(max(int(self.var["esforco"].get()), 1), 5)
+                esforco = int(self.var["esforco"].get())
+                if esforco < 1:
+                    esforco = 1
+                elif esforco > 5:
+                    esforco = 5
             except ValueError:
                 esforco = 2
-            tarefa = Tarefa(
-                nome,
-                1,
-                esforco,
-                turnos_permitidos=(turno,) if turno is not None else (0, 1, 2),
-                dias_permitidos=(dia,),
-                extra=True,
-            )
+            turnos_perm = (turno,) if turno is not None else (0, 1, 2)
+            tarefa = dados.Tarefa(nome, 1, esforco, turnos_permitidos=turnos_perm, dias_permitidos=(dia,), extra=True)
             imp = Imprevisto(tipo, dia, turno, nova_tarefa=tarefa)
         else:
             indice = self.cb_ocorrencia.current()
@@ -1565,11 +1646,12 @@ class DialogoImprevisto(tk.Toplevel):
                 messagebox.showerror("Imprevisto", "Não há tarefa registrada para esse dia.", parent=self)
                 return
             imp = Imprevisto(tipo, dia, ocorrencia=self.ocorrencias[indice])
+
         self.destroy()
         self.app.registrar_imprevisto(imp)
 
 
-def imprimir_escala(integrantes: list[Integrante], tarefas: list[Tarefa]) -> None:
+def imprimir_escala(integrantes, tarefas):
     plano = planejar_semana(integrantes, tarefas)
     print(
         f"Busca clássica: plano com custo {plano.custo:.1f}, {plano.nos_expandidos} nós expandidos pelo A* "
@@ -1581,14 +1663,24 @@ def imprimir_escala(integrantes: list[Integrante], tarefas: list[Tarefa]) -> Non
 
     r = gerar_escala(integrantes, tarefas, plano.horarios)
     print(f"\nBusca local: custo {r.custo_inicial:.0f} (guloso) -> {r.custo:.0f} (SA) em {r.tempo:.1f}s")
-    print("Violações:", {k: v for k, v in r.componentes.items() if v})
+    violacoes = {}
+    for k, v in r.componentes.items():
+        if v:
+            violacoes[k] = v
+    print("Violações:", violacoes)
+
     for i, p in enumerate(integrantes):
         print(f"\n{p.nome} ({p.cargo})")
-        for t, _, d, s in sorted((a for a in r.estado if a and a[1] == i), key=lambda a: (a[2], a[3])):
+        minhas = []
+        for a in r.estado:
+            if a and a[1] == i:
+                minhas.append(a)
+        minhas.sort(key=lambda a: (a[2], a[3]))
+        for t, _, d, s in minhas:
             print(f"  {DIAS[d]:<8} {TURNOS[s]:<6} {tarefas[t].nome}")
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(description="Gestão e logística doméstica para república")
     parser.add_argument("--forms", metavar="CSV", help="CSV exportado das respostas do Google Forms")
     parser.add_argument("--sheets", metavar="LINK", help="link da planilha de respostas do Google Forms")
@@ -1602,7 +1694,7 @@ def main() -> None:
         print(f"CSV de exemplo salvo em {args.exemplo_csv}")
         return
 
-    avisos: list[str] = []
+    avisos = []
     if args.forms:
         integrantes, avisos = dados.carregar_forms_arquivo(args.forms)
         fonte = f"Google Forms ({args.forms})"
@@ -1610,7 +1702,9 @@ def main() -> None:
         integrantes, avisos = dados.carregar_forms_google_sheets(args.sheets)
         fonte = "Google Forms (planilha online)"
     else:
-        integrantes, fonte = dados.integrantes_simulados(), "Dados simulados"
+        integrantes = dados.integrantes_simulados()
+        fonte = "Dados simulados"
+
     for aviso in avisos:
         print("Aviso:", aviso)
 

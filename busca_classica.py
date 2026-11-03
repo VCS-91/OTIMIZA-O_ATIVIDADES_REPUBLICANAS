@@ -1,16 +1,5 @@
-"""Busca Clássica: define em que dia e turno cada tarefa da semana será executada.
-
-Aqui ainda não se escolhe quem faz cada tarefa (isso é a busca local): só se monta
-o plano da semana. As tarefas são planejadas uma de cada vez, primeiro as que são
-pré-requisito de outras (varrer antes de passar pano), depois as mais restritas.
-Para cada tarefa, um A* procura a melhor sequência de horários para as ocorrências:
-
-  estado   = (ocorrências já marcadas, último dia usado)
-  ação     = marcar a próxima ocorrência num (dia, turno) depois do último dia usado
-  custo    = custo do horário (PESOS) + espaçamento irregular entre as repetições
-  objetivo = todas as ocorrências da semana marcadas
-  h(n)     = ocorrências restantes × menor custo de horário possível (admissível)
-"""
+# Algoritmo A* para montar o esqueleto da semana (dia e turno das tarefas).
+# A heurística h(n) é admissível: ocorrências restantes * menor custo possível.
 from __future__ import annotations
 
 import heapq
@@ -61,13 +50,13 @@ class PlanoSemana:
 
 
 def _ordem_de_planejamento(tarefas: list[Tarefa]) -> list[int]:
-    """Pré-requisitos primeiro; depois as tarefas com menos horários possíveis por ocorrência."""
+    # Coloca quem tem pré-requisito primeiro e depois as tarefas mais difíceis de encaixar
     indice = {t.nome: i for i, t in enumerate(tarefas)}
     nivel: dict[int, int] = {}
 
     def calcular(i: int) -> int:
         if i not in nivel:
-            nivel[i] = 0  # evita laço infinito se houver dependência circular
+            nivel[i] = 0  # trava pra não dar loop infinito se rolar dependência circular
             deps = [indice[d] for d in tarefas[i].depende_de if d in indice]
             nivel[i] = 1 + max(map(calcular, deps)) if deps else 0
         return nivel[i]

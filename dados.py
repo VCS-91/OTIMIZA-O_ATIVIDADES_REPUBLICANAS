@@ -1,17 +1,4 @@
-"""Modelos de dados, dados simulados e leitura das respostas do Google Forms.
-
-Formato esperado do Forms (respostas exportadas como CSV pelo Google Planilhas):
-  - "Nome"                                  -> resposta curta
-  - "Hierarquia na república"               -> múltipla escolha: Decano / Vice-Decano / Morador / Semi-Bixo / Calouro
-  - "Horários ocupados (...) [Segunda]" ... "[Domingo]"
-                                            -> grade de caixas de seleção
-                                               (linhas = dias, colunas = Manhã / Tarde / Noite)
-  - "Dias livres (...)"                     -> caixas de seleção com os dias
-  - "Dias preferidos (...)"                 -> caixas de seleção com os dias
-Os cabeçalhos são reconhecidos por palavras-chave (nome, hierarquia, livre, prefer, [Dia]),
-então o texto exato das perguntas pode variar. Rode `python main.py --exemplo-csv arquivo.csv`
-para gerar um CSV de exemplo nesse formato.
-"""
+# Lê as respostas exportadas do Forms e converte pra lista de Integrantes.
 from __future__ import annotations
 
 import csv
@@ -142,7 +129,7 @@ def _hierarquia(valor: str) -> int:
 
 def ler_respostas_forms(texto_csv: str) -> tuple[list[Integrante], list[str]]:
     """Converte o CSV de respostas do Forms em integrantes. Devolve (integrantes, avisos)."""
-    leitor = csv.DictReader(io.StringIO(texto_csv.lstrip("﻿")))
+    leitor = csv.DictReader(io.StringIO(texto_csv.lstrip("\ufeff")))
     colunas = leitor.fieldnames or []
 
     def achar(*chaves: str) -> str | None:
@@ -177,8 +164,7 @@ def ler_respostas_forms(texto_csv: str) -> tuple[list[Integrante], list[str]]:
             d := _dia(item)) is not None]
         maximo = MAX_DIAS_LIVRES.get(nivel, 0)
         if len(livres) > maximo:
-            avisos.append(f"{nome} ({HIERARQUIAS[nivel]}) pediu {len(livres)} dia(s) livre(s), "
-                          f"mas só pode ter {maximo}; mantidos os primeiros.")
+            avisos.append(f"Atenção: {nome} pediu {len(livres)} dias livres, mas como {HIERARQUIAS[nivel]} só tem direito a {maximo}. Cortando os excedentes.")
             livres = livres[:maximo]
         preferidos = {d for item in _itens(
             linha.get(col_preferidos)) if (d := _dia(item)) is not None}
@@ -197,11 +183,7 @@ def carregar_forms_arquivo(caminho: str) -> tuple[list[Integrante], list[str]]:
 
 
 def link_para_csv(url: str) -> str:
-    """Converte o link da planilha de respostas no link de exportação em CSV.
-
-    A planilha precisa estar compartilhada como "qualquer pessoa com o link pode ver"
-    (ou publicada na web em CSV, caso em que o link já serve como está).
-    """
+    """Converte o link da planilha de respostas no link de exportação em CSV."""
     if "/d/e/" in url or "format=csv" in url or "output=csv" in url:
         return url
     m = re.search(r"/spreadsheets/d/([\w-]+)", url)
@@ -213,8 +195,11 @@ def link_para_csv(url: str) -> str:
 
 
 def carregar_forms_google_sheets(url: str) -> tuple[list[Integrante], list[str]]:
-    with urllib.request.urlopen(link_para_csv(url), timeout=15) as resposta:
-        return ler_respostas_forms(resposta.read().decode("utf-8-sig"))
+    try:
+        with urllib.request.urlopen(link_para_csv(url), timeout=15) as resposta:
+            return ler_respostas_forms(resposta.read().decode("utf-8-sig"))
+    except Exception as e:
+        raise RuntimeError(f"Falha ao conectar no Google Planilhas. Verifique o link ou a internet. Erro: {e}")
 
 
 def gerar_csv_exemplo(integrantes: list[Integrante], caminho: str) -> None:

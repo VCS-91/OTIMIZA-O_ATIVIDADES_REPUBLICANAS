@@ -1,11 +1,6 @@
-"""Busca Online: replaneja a escala durante a semana conforme os imprevistos acontecem.
-
-Diferente da busca local, que planeja a semana inteira de uma vez com tudo conhecido,
-o agente online só conhece o que já aconteceu. A cada imprevisto ele trava o passado,
-reaproveita a escala atual, conserta só o que ficou inviável (reparo guloso) e faz uma
-busca local curta e "fria" em que cada alteração tem custo (PESOS["mudanca"]), para
-não bagunçar a escala de quem não foi afetado.
-"""
+# Agente reativo para os imprevistos da semana (Busca Online).
+# Congela o que já passou, aplica um reparo guloso no que quebrou e faz 
+# um Simulated Annealing rápido pra não bagunçar muito a escala do resto da casa.
 from __future__ import annotations
 
 import copy

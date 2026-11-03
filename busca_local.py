@@ -1,18 +1,6 @@
-"""Busca Local: aloca os integrantes nas tarefas da semana.
-
-A busca clássica já definiu o dia e o turno de cada ocorrência de tarefa (ex.: a 2ª
-vez que a casa é varrida na semana); aqui se escolhe quem faz cada uma, conforme a
-disponibilidade (aulas, trabalho, compromissos, dias livres) e a hierarquia. Uma
-solução gulosa inicial, em que cada ocorrência pega o integrante mais barato no
-momento, é refinada por Simulated Annealing, minimizando a função de custo dos PESOS.
-
-Sem horários definidos (caso da busca online), o domínio de cada ocorrência volta a
-ser (integrante, dia, turno), e a mesma busca também pode mover a tarefa de horário.
-
-A hierarquia entra no custo de duas formas: os dias livres escolhidos pelos mais
-velhos são restrição rígida, e sair dos dias preferidos de alguém custa mais
-quanto maior a hierarquia dessa pessoa (ela tem prioridade para escolher o dia).
-"""
+# Simulated Annealing para distribuir as tarefas entre a galera da casa.
+# Pega os horários definidos pelo A* e tenta alocar quem tá livre, minimizando
+# os choques de horário, prioridades e carga de esforço.
 from __future__ import annotations
 
 import math
@@ -30,7 +18,7 @@ PESOS = {
     "choque": 60,          # integrante com duas tarefas no mesmo turno
     "dependencia": 40,     # ex.: passar pano num dia sem varrer, ou num turno anterior
     "dias_seguidos": 10,   # tarefa de poucas vezes por semana em dias consecutivos
-    # desequilíbrio de esforço entre integrantes (soma dos desvios²)
+    # penaliza quem tá trabalhando muito mais que a média da casa (soma dos desvios²)
     "carga": 4,
     # fora dos dias preferidos (multiplicado pelo nível hierárquico)
     "preferencia": 3,

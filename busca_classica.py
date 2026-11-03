@@ -1,4 +1,4 @@
-# Algoritmo A* para montar o esqueleto da semana (dia e turno das tarefas).
+# Algoritmo para montar o esqueleto da semana (dia e turno das tarefas).
 # A heurística h(n) é admissível: ocorrências restantes * menor custo possível.
 # Cada tarefa é resolvida pelo A* e depois a semana é refinada tarefa a tarefa,
 # com o A* vendo todas as outras tarefas, até o custo global parar de cair.
@@ -16,14 +16,11 @@ from dados import Integrante, Tarefa
 PESOS = {
     # × fração dos integrantes ocupados (aula/trabalho/dia livre) no turno
     "poucos_disponiveis": 10,
-    "turno_cheio": 6,          # por tarefa já marcada no mesmo turno
-    # × esforço da tarefa × esforço das outras tarefas marcadas no mesmo dia
+    "turno_cheio": 6,       
     "esforco_no_dia": 0.5,
-    # × (intervalo entre repetições - intervalo ideal)²
     "espacamento": 4,
-    # pré-requisito ausente no dia, ou marcado no mesmo turno ou num turno posterior
     "dependencia": 50,
-    "sem_ninguem": 1000,       # nenhum integrante livre sobrando naquele turno
+    "sem_ninguem": 1000,      
 }
 
 
@@ -33,18 +30,18 @@ class PlanoTarefa:
     horarios: list[tuple[int, int]]
     custo: float
     nos_expandidos: int
-    nos_sem_heuristica: int  # busca de custo uniforme no mesmo subproblema, para comparação
+    nos_sem_heuristica: int  
+    # busca de custo uniforme no mesmo subproblema, para comparação
 
 
 @dataclass
 class PlanoSemana:
-    # alinhado com ProblemaEscala.ocorrencias()
     horarios: list[tuple[int, int]]
-    custo: float                 # custo global da semana (custo_global)
+    custo: float                 
     tempo: float
     por_tarefa: list[PlanoTarefa] = field(default_factory=list)
-    custo_inicial: float = 0.0   # custo global após a 1ª passada, antes do refino
-    rodadas: int = 0             # rodadas de refino executadas
+    custo_inicial: float = 0.0   
+    rodadas: int = 0             
 
     @property
     def nos_expandidos(self) -> int:
@@ -62,7 +59,7 @@ def _ordem_de_planejamento(tarefas: list[Tarefa]) -> list[int]:
 
     def calcular(i: int) -> int:
         if i not in nivel:
-            nivel[i] = 0  # trava pra não dar loop infinito se rolar dependência circular
+            nivel[i] = 0  
             deps = [indice[d] for d in tarefas[i].depende_de if d in indice]
             nivel[i] = 1 + max(map(calcular, deps)) if deps else 0
         return nivel[i]
@@ -100,7 +97,6 @@ def _a_estrela(tarefa: Tarefa, custo_horario: dict[tuple[int, int], float],
         expandidos += 1
         restantes = vezes - marcadas - 1
         for d in dias:
-            # depois do último dia usado, e deixando dias suficientes para as próximas ocorrências
             if d <= ultimo or sum(1 for x in dias if x > d) < restantes:
                 continue
             espaco = PESOS["espacamento"] * \
@@ -132,9 +128,9 @@ def _custos_horario(t: int, tarefas: list[Tarefa], planejadas: dict[int, list[tu
     deixa a semana inteira mais barata.
     """
     nomes = {x.nome for x in tarefas}
-    ocupacao = Counter()          # tarefas marcadas em cada (dia, turno)
-    esforco_dia = Counter()       # esforço marcado em cada dia
-    turno_de: dict[tuple[str, int], int] = {}  # (tarefa, dia) -> turno
+    ocupacao = Counter()          
+    esforco_dia = Counter()      
+    turno_de: dict[tuple[str, int], int] = {}  
     for u, horarios in planejadas.items():
         if u == t:
             continue
@@ -154,12 +150,9 @@ def _custos_horario(t: int, tarefas: list[Tarefa], planejadas: dict[int, list[tu
                  + PESOS["esforco_no_dia"] * tarefa.esforco * esforco_dia[d])
             if disponiveis[d, s] - ocupacao[d, s] <= 0:
                 c += PESOS["sem_ninguem"]
-            # pré-requisito de t ausente no dia, ou no mesmo turno / turno posterior
             for dep in tarefa.depende_de:
                 if dep in nomes and turno_de.get((dep, d), math.inf) >= s:
                     c += PESOS["dependencia"]
-            # t é pré-requisito: só "cobre" a tarefa dependente se ela estiver no
-            # mesmo dia e num turno posterior. Quem não cobre paga a penalidade.
             for u in dependentes_marcadas:
                 if turno_de.get((tarefas[u].nome, d), -1) <= s:
                     c += PESOS["dependencia"]
@@ -195,11 +188,10 @@ def custo_global(tarefas: list[Tarefa], planejadas: dict[int, list[tuple[int, in
             esforcos_dia.setdefault(d, []).append(tarefa.esforco)
             turno_de[tarefa.nome, d] = s
     for h, n in por_horario.items():
-        c += PESOS["turno_cheio"] * n * (n - 1) / 2       # cada par no mesmo turno
+        c += PESOS["turno_cheio"] * n * (n - 1) / 2       
         c += PESOS["sem_ninguem"] * max(0, n - disponiveis[h])
     for esforcos in esforcos_dia.values():
         soma = sum(esforcos)
-        # para cada par de tarefas no mesmo dia, o produto dos esforços
         c += PESOS["esforco_no_dia"] * \
             (soma * soma - sum(e * e for e in esforcos)) / 2
     for t, horarios in planejadas.items():
@@ -256,8 +248,7 @@ def planejar_semana(integrantes: list[Integrante], tarefas: list[Tarefa],
         if not melhorou:
             break
 
-    # Custo de cada tarefa = quanto ela acrescenta ao custo global, vendo só as
-    # anteriores na ordem de planejamento. A soma dá exatamente o custo global.
+    # Custo de cada tarefa
     por_tarefa = []
     anteriores: dict[int, list[tuple[int, int]]] = {}
     for t in ordem:

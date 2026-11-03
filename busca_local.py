@@ -13,17 +13,13 @@ from dados import Integrante, Tarefa
 
 # Pesos da função de custo. Os de 1000 são restrições rígidas.
 PESOS = {
-    "indisponivel": 1000,  # aula, trabalho, compromisso ou dia livre
-    "dia_repetido": 1000,  # mesma tarefa duas vezes no mesmo dia
-    "choque": 60,          # integrante com duas tarefas no mesmo turno
-    # ex.: passar pano num dia sem varrer, ou no mesmo turno/antes de varrer
+    "indisponivel": 1000, 
+    "dia_repetido": 1000,  
+    "choque": 60,         
     "dependencia": 40,
-    "dias_seguidos": 10,   # tarefa de poucas vezes por semana em dias consecutivos
-    # penaliza quem tá trabalhando muito mais que a média da casa (soma dos desvios²)
+    "dias_seguidos": 10,    
     "carga": 4,
-    # fora dos dias preferidos (multiplicado pelo nível hierárquico)
     "preferencia": 3,
-    # alteração em relação à escala anterior (usado pela busca online)
     "mudanca": 15,
 }
 
@@ -39,9 +35,8 @@ class ProblemaEscala:
         self.tarefas = tarefas
         # ocorrências que não podem ser mexidas
         self.fixos = set(fixos)
-        self.dia_minimo = dia_minimo     # não aloca nada antes deste dia
-        self.referencia = referencia     # escala anterior, para medir mudanças
-        # (dia, turno) de cada ocorrência, vindos da busca clássica
+        self.dia_minimo = dia_minimo     
+        self.referencia = referencia     
         self.horarios = horarios
         self._dependencias = {t.nome: t.depende_de for t in tarefas}
         self._dominios: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
@@ -111,11 +106,10 @@ class ProblemaEscala:
         k = rng.choice(moveis)
         t, i, d, s = novo[k]
         r = rng.random()
-        if r < 0.5:    # nova opção qualquer do domínio
+        if r < 0.5:    
             novo[k] = (t, *rng.choice(self.dominio(k, t)))
-        elif r < 0.75:  # troca só o responsável
+        elif r < 0.75: 
             novo[k] = (t, rng.randrange(len(self.integrantes)), d, s)
-        # troca os responsáveis de duas ocorrências (os horários ficam)
         else:
             k2 = rng.choice(moveis)
             t2, i2, d2, s2 = novo[k2]

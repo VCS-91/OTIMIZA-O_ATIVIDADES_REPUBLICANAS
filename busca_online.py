@@ -27,10 +27,10 @@ EXTRAS_POSSIVEIS = [
 class Imprevisto:
     tipo: str
     dia: int
-    turno: int | None = None             # None = dia inteiro / qualquer turno
-    integrante: int | None = None        # indisponivel
-    ocorrencia: int | None = None        # nao_realizada: posição na escala
-    nova_tarefa: Tarefa | None = None    # extra
+    turno: int | None = None             
+    integrante: int | None = None        
+    ocorrencia: int | None = None        
+    nova_tarefa: Tarefa | None = None    
 
     def descricao(self, agente: AgenteOnline) -> str:
         dia = DIAS[self.dia]
@@ -126,7 +126,6 @@ class AgenteOnline:
         if tipo == "extra":
             base = rng.choice(EXTRAS_POSSIVEIS)
             return Imprevisto(tipo, hoje, nova_tarefa=replace(base, dias_permitidos=(hoje,), extra=True))
-        # indisponível justamente quando tinha tarefa, para forçar o replanejamento
         proximas = [
             a for a in self.estado if a is not None and hoje <= a[2] <= hoje + 1]
         if proximas:

@@ -22,7 +22,7 @@ class Integrante:
     nome: str
     hierarquia: int
     ocupados: set[tuple[int, int]] = field(
-        default_factory=set)  # (dia, turno) com aula/trabalho
+        default_factory=set) 
     dias_livres: set[int] = field(default_factory=set)
     dias_preferidos: set[int] = field(default_factory=set)
 
@@ -43,10 +43,10 @@ class Tarefa:
     dias_permitidos: tuple[int, ...] = tuple(range(7))
     # tarefas que, no mesmo dia, devem vir antes
     depende_de: tuple[str, ...] = ()
-    extra: bool = False  # criada pela busca online (imprevisto ou repetição)
+    extra: bool = False 
 
 
-# ---------------------------------------------------------------- dados simulados
+# dados simulados
 
 def _agenda(**dias: str) -> set[tuple[int, int]]:
     """_agenda(seg="MT", ter="N") -> {(0, 0), (0, 1), (1, 2)}"""
@@ -89,7 +89,7 @@ def tarefas_padrao() -> list[Tarefa]:
     ]
 
 
-# ---------------------------------------------------------------- Google Forms
+# Google Forms
 
 _CHAVES_DIA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
 # Ordem importa: "vice-decano" contém "decano" e "semi-bixo" contém "bixo".
@@ -168,7 +168,7 @@ def ler_respostas_forms(texto_csv: str) -> tuple[list[Integrante], list[str]]:
             livres = livres[:maximo]
         preferidos = {d for item in _itens(
             linha.get(col_preferidos)) if (d := _dia(item)) is not None}
-        # Se a mesma pessoa respondeu mais de uma vez, vale a resposta mais recente.
+        # se a mesma pessoa respondeu mais de uma vez, vale a resposta mais recente.
         por_nome[_normalizar(nome)] = Integrante(
             nome, nivel, ocupados, set(livres), preferidos)
 

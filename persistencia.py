@@ -16,7 +16,7 @@ VERSAO = 1
 ARQUIVO_PADRAO = Path(__file__).with_name("estado_republica.json")
 
 
-# ---------------------------------------------------------------- conversões
+# conversões
 
 def _aloc(a):
     return None if a is None else list(a)
@@ -113,7 +113,7 @@ def agente_de_dict(d: dict) -> AgenteOnline:
     return ag
 
 
-# ---------------------------------------------------------------- arquivo
+# arquivo
 
 def salvar(estado: dict, caminho: str | Path = ARQUIVO_PADRAO) -> None:
     """Grava num arquivo temporário e depois troca, para nunca deixar o JSON pela metade."""

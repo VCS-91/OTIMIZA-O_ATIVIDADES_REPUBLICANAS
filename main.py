@@ -93,8 +93,6 @@ class App(tk.Tk):
         self.integrantes = integrantes
         self.tarefas = tarefas
         self.fonte = fonte
-        # de onde vieram os horários, para reler o Forms quando a semana virar:
-        # {"tipo": "simulado"} | {"tipo": "csv", "ref": caminho} | {"tipo": "sheets", "ref": link}
         self.origem = origem or {"tipo": "simulado"}
         self.arquivo_estado = arquivo_estado
         self.rng = random.Random()
@@ -584,7 +582,7 @@ class App(tk.Tk):
             fg=COR["texto"],
         ).pack(anchor="w")
 
-    # ------------------------------------------------------------ acoes e eventos
+    # acoes e eventos
 
     def nova_escala(self, dia):
         self.configure(cursor="watch")
@@ -854,10 +852,9 @@ class App(tk.Tk):
         ag = self.agente
         descricao = imp.descricao(ag)
 
-        # Se a tarefa nao foi feita, anota 1 dose de pinga pro responsavel antes de replanejar
+        # tarefa nao feita, 1 dose anotada
         if imp.tipo == "nao_realizada" and imp.ocorrencia is not None:
-            # Vale para qualquer origem (botão "Não fez", janela de imprevisto ou
-            # "Simular B.O."): se a tarefa estava marcada como feita, deixa de estar.
+            # se a tarefa estava marcada como feita, deixa de estar.
             self.concluidas.discard(imp.ocorrencia)
             t_orig, i_orig, d_orig, _ = ag.estado[imp.ocorrencia]
             nome_tarefa = ag.tarefas[t_orig].nome
@@ -882,7 +879,7 @@ class App(tk.Tk):
         imp = self.agente.imprevisto_aleatorio(self.rng)
         self.registrar_imprevisto(imp)
 
-    # ------------------------------------------------------------ atualizacao da tela
+    # atualizar
 
     def atualizar(self):
         self._desenhar_checkin_hoje()
@@ -938,7 +935,7 @@ class App(tk.Tk):
         # Toda ação passa por aqui, então salvar aqui mantém o arquivo sempre em dia.
         self._salvar()
 
-    # ------------------------------------------------------------ salvar / recuperar
+    # salvar | recuperar
 
     def _estado_para_salvar(self):
         return {
@@ -1866,8 +1863,7 @@ def main():
         imprimir_escala(integrantes, dados.tarefas_padrao())
         return
 
-    # Retoma a escala salva, a não ser que se peça --novo ou que se aponte
-    # outra fonte de horários (--forms/--sheets diferente da salva).
+    # Retoma a escala salva.
     estado_salvo = None
     if not args.novo:
         try:
